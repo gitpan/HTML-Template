@@ -1,12 +1,7 @@
-# Before `make install' is performed this script should be runnable with
-# `make test'. After `make install' it should work as `perl test.pl'
-
 use strict;
-use Test;
-BEGIN { plan tests => 57 };
+use Test::More qw(no_plan);
 
-use HTML::Template;
-ok(1);
+use_ok('HTML::Template');
 
 my ($output, $template, $result);
 
@@ -306,11 +301,11 @@ ok($output !~ /Loop not filled in/);
 
 # test shared memory - enable by setting the environment variable
 # TEST_SHARED_MEMORY to 1.
-if (!exists($ENV{TEST_SHARED_MEMORY}) or !$ENV{TEST_SHARED_MEMORY}) {
-  print "Skipping shared memory cache test.  See README to enable\n";
-  skip(1, 0); 
-  skip(1, 0);
-} else {
+SKIP: {
+  skip "Skipping shared memory cache test.  See README to enable\n", 2
+    if (!exists($ENV{TEST_SHARED_MEMORY}) or !$ENV{TEST_SHARED_MEMORY});
+
+
   require 'IPC/SharedCache.pm';
   my $template_prime = HTML::Template->new(
                                            filename => 'simple-loop.tmpl',
@@ -355,10 +350,10 @@ if (!exists($ENV{TEST_SHARED_MEMORY}) or !$ENV{TEST_SHARED_MEMORY}) {
 
 # test CGI associate bug    
 eval { require 'CGI.pm'; };
-if ($@) {
-  print "Skipping associate tests, need CGI.pm to test associate\n";
-  skip(1, 0); 
-} else {
+SKIP: {
+  skip "Skipping associate tests, need CGI.pm to test associate\n", 1
+    if ($@);
+
   my $query = CGI->new('');
   $query->param('AdJecTivE' => 'very');
   $template = HTML::Template->new(
@@ -492,51 +487,45 @@ eval {
 ok(defined $@ and $@ =~ /no_includes/);
 
 # test file cache - non automated, requires turning on debug watching STDERR!
-if (!exists($ENV{TEST_FILE_CACHE}) or !$ENV{TEST_FILE_CACHE}) {
-  print "Skipping file cache test.  See README to enable.\n";
-  skip(1,0);
-  skip(1,0);
-} else {
-  $template = HTML::Template->new(
-                                  path => ['templates/'],
-                                  filename => 'simple.tmpl',
-                                  file_cache_dir => './blib/temp_cache_dir',
-                                  file_cache => 1,
-                                  #cache_debug => 1,
-                                  #debug => 0,
-                                 );
-  $template->param(ADJECTIVE => sub { "3y"; });
-  $output =  $template->output;
-  $template = HTML::Template->new(
-                                  path => ['templates/'],
-                                  filename => 'simple.tmpl',
-                                  file_cache_dir => './blib/temp_cache_dir',
-                                  file_cache => 1,
-                                  #cache_debug => 1,
-                                  #debug => 0,
-                                 );
-  ok($output =~ /3y/);
+$template = HTML::Template->new(
+                                path => ['templates/'],
+                                filename => 'simple.tmpl',
+                                file_cache_dir => './blib/temp_cache_dir',
+                                file_cache => 1,
+                                #cache_debug => 1,
+                                #debug => 0,
+                               );
+$template->param(ADJECTIVE => sub { "3y"; });
+$output =  $template->output;
+$template = HTML::Template->new(
+                                path => ['templates/'],
+                                filename => 'simple.tmpl',
+                                file_cache_dir => './blib/temp_cache_dir',
+                                file_cache => 1,
+                                #cache_debug => 1,
+                                #debug => 0,
+                               );
+ok($output =~ /3y/);
 
-  my $x;
-  $template = HTML::Template->new(filename => 'templates/simple-loop.tmpl',
-                                  filter => {
-                                             sub => sub {
+my $x;
+$template = HTML::Template->new(filename => 'templates/simple-loop.tmpl',
+                                filter => {
+                                           sub => sub {
                                                $x = 1;
-                                             for (@{$_[0]}) {
-                                               $_ = "$x : $_";
-                                               $x++;
-                                             }
-                                             },
-                                             format => 'array',
-                                            },
-                                  file_cache_dir => './blib/temp_cache_dir',
-                                  file_cache => 1,
-                                  global_vars => 1,
-                                 );
+                                               for (@{$_[0]}) {
+                                                   $_ = "$x : $_";
+                                                   $x++;
+                                               }
+                                           },
+                                           format => 'array',
+                                          },
+                                file_cache_dir => './blib/temp_cache_dir',
+                                file_cache => 1,
+                                global_vars => 1,
+                               );
 $template->param('ADJECTIVE_LOOP', [ { ADJECTIVE => 'really' }, { ADJECTIVE => 'very' } ] );
-  $output =  $template->output;
-  ok($output =~ /very/);
-}
+$output =  $template->output;
+ok($output =~ /very/);
 
 $template = HTML::Template->new(filename => './templates/include_path/a.tmpl');
 $output =  $template->output;
@@ -547,7 +536,7 @@ $template = HTML::Template->new(filename => './templates/include_path/a.tmpl');
 $template->output(print_to => *OUT);
 close(OUT);
 open(OUT, "blib/test.out") or die $!;
-my $output = join('',<OUT>);
+$output = join('',<OUT>);
 close(OUT);
 ok($output =~ /Bar/);
 
@@ -614,7 +603,7 @@ $template = HTML::Template->new(filename => './templates/include_path/a.tmpl',
 $output =  $template->output;
 ok($output =~ /Zanzabar!!!/);
 
-my $x;
+
 $template = HTML::Template->new(filename => './templates/include_path/a.tmpl',
                                 filter => {
                                            sub => sub {
@@ -714,7 +703,7 @@ ok($output =~ /inner loop foo:    foo val 1/ and
 
 
 # test nested include path handling
-my $template = HTML::Template->new(path => ['templates'],
+$template = HTML::Template->new(path => ['templates'],
 				   filename => 'include_path/one.tmpl');
 $output = $template->output;
 ok($output =~ /ONE/ and $output =~ /TWO/ and $output =~ /THREE/);
@@ -731,7 +720,7 @@ ok($output =~ /ONE/ and $output =~ /TWO/ and $output =~ /THREE/);
 }
 
 # test __counter__
-my $template = HTML::Template->new(path              => ['templates'],
+$template = HTML::Template->new(path              => ['templates'],
 				   filename          => 'counter.tmpl',
                                    loop_context_vars => 1);
 $template->param(foo => [ {a => 'a'}, {a => 'b'}, {a => 'c'} ]);
@@ -742,7 +731,7 @@ ok($output =~ /^1a2b3c$/m);
 ok($output =~ /^11a2b3c21x2y3z$/m);
 
 # test default
-my $template = HTML::Template->new(path              => ['templates'],
+$template = HTML::Template->new(path              => ['templates'],
 				   filename          => 'default.tmpl');
 $template->param(cl => 'clothes');
 $template->param(start => 'start');
@@ -754,3 +743,67 @@ eval {
     my $template = HTML::Template->new(scalarref => \'<tmpl_var>');
 };
 ok($@ =~ /No NAME given/);
+
+
+# test a case where a different path should stimulate a cache miss
+# even though the main template is the same
+$template = HTML::Template->new(path => ['templates', 
+                                            'templates/include_path'],
+                                   filename => 'outer.tmpl',
+                                   search_path_on_include => 1,
+                                   cache => 1,
+                                   # cache_debug => 1,
+                                  );
+$output = $template->output;
+ok($output =~ /I AM OUTER/);
+ok($output =~ /I AM INNER 1/);
+
+$template = HTML::Template->new(path => ['templates', 
+                                            'templates/include_path2'],
+                                   filename => 'outer.tmpl',
+                                   search_path_on_include => 1,
+                                   cache => 1,
+                                   # cache_debug => 1,
+                                  );
+$output = $template->output;
+ok($output =~ /I AM OUTER/);
+ok($output =~ /I AM INNER 2/);
+
+# try the same thing with the file cache
+$template = HTML::Template->new(path => ['templates', 
+                                            'templates/include_path'],
+                                   filename => 'outer.tmpl',
+                                   search_path_on_include => 1,
+                                   file_cache_dir => './blib/temp_cache_dir',
+                                   file_cache => 1,
+                                   # cache_debug => 1,
+                                  );
+$output = $template->output;
+ok($output =~ /I AM OUTER/);
+ok($output =~ /I AM INNER 1/);
+
+$template = HTML::Template->new(path => ['templates', 
+                                            'templates/include_path2'],
+                                   filename => 'outer.tmpl',
+                                   search_path_on_include => 1,
+                                   file_cache_dir => './blib/temp_cache_dir',
+                                   file_cache => 1,
+                                   # cache_debug => 1,
+                                  );
+$output = $template->output;
+ok($output =~ /I AM OUTER/);
+ok($output =~ /I AM INNER 2/);
+
+# test javascript escaping
+$template = $template = HTML::Template->new(path => ['templates'],
+                                            filename => 'js.tmpl');
+$template->param(msg => qq{"He said 'Hello'.\n\r"});
+$output = $template->output();
+is($output, q{\\"He said \\'Hello\\'.\\n\\r\\"});
+
+# test empty filename
+eval { $template = $template = HTML::Template->new(path => ['templates'],
+                                                   filename => '');
+};
+like($@, qr/empty filename/);
+

@@ -3,21 +3,26 @@
 
 CHANGES
 
-2.6 Thu Aug 29 12:00:00 2002
-      - New Feature: HTML::Template will combine HTML_TEMPLATE_ROOT
-                     environment variable and path option if both are
-                     available. (Jesse Erlbaum)
-      - New Feature: __counter__ variable now available when
-                     loop_context_vars is set (Simran Gambhir)
-      - New Feature: The default attribute allows you to specify
-                     defaults for <tmpl_var> tags.
-      - Bug Fix: fixed parser to reject <tmpl_var>s with no names.
-                 (crazyinsomniac)
-      - Doc Fix: fixed documentation to correctly describe the
-                 interaction of case_sensitive and loop_context_vars.
-                 (Peter Claus Lamprecht)
-      - Doc Fix: updated mailing-list information to reflect move from
-                 vm.com to sourceforge.net
+2.7 Thu Jun 24 12:00:00 2004
+
+   - New Feature: Added javascript escaping with ESCAPE=JS. (Craig Manley)
+
+   - Bug Fix: Improved cache keying to be sensitive to options which
+              alter the compilation of templates (path, search_path,
+              loop_context_vars and global_vars).  Calls to new() with
+              different settings for any of these options will no longer pull
+              incorrect cached objects.
+
+   - Bug Fix: Added code to detect broken Perl 5.8.0 installs
+              during installation (i.e. Redhat 8 and 9).
+
+   - Bug Fix: Fixed parsing of ESCAPE='URL' (Paul Baker)
+
+   - Bug Fix: Added check for empty filename passed to new().
+
+   - Test Fix: Migrated tests to Test::More.  This will allow the
+               easier introduction of new tests and the use of
+               Devel::Cover. (Gabor Szabo)
 
 DESCRIPTION
 
@@ -89,12 +94,6 @@ IPC::SharedCache installed (available from the same place you got
 HTML::Template, either CPAN or SourceForge) and then do:
 
        TEST_SHARED_MEMORY=1 make test
-
-If you plan to use the file cache you might want to test it before you
-install.  Make sure you have an up-to-date copy of Storable and
-Digest::MD5 (both available on CPAN) installed and then do:
-
-       TEST_FILE_CACHE=1 make test
 
 CONTACT INFO
 

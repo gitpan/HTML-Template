@@ -2,7 +2,7 @@ Changes
 MANIFEST
 Makefile.PL
 Template.pm
-test.pl
+t/99-old-test-pl.t
 templates/simple.tmpl
 templates/simple-loop.tmpl
 templates/medium.tmpl
@@ -40,6 +40,10 @@ templates/case_loop.tmpl
 templates/global-loops.tmpl
 templates/counter.tmpl
 templates/default.tmpl
+templates/outer.tmpl
+templates/include_path2/inner.tmpl
+templates/include_path/inner.tmpl
+templates/js.tmpl
 scripts/time_trial.pl
 scripts/clean_shm.pl
 README
