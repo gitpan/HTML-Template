@@ -35,3 +35,9 @@ Revision history for Perl extension HTML::Template.
           Blazer, Adriano Nagelschmidt Rodrigues, Andrej Mikus and
           Ilya Obshadko.  Thanks!
         
+0.05
+        - Added <TMPL_INCLUDE> functionality!
+        - Added associate_CGI() method - donated by Richard Dice
+        - Cleaned up internal access to new() options.
+        - more bug fixes from such notables as Kevin Puetz, and Steve
+          Reppucci.       

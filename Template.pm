@@ -2,7 +2,7 @@ package HTML::Template;
 
 use strict;
 use vars qw( $VERSION %CACHE );
-$VERSION = 0.04;
+$VERSION = 0.05;
 
 %HTML::Template::CACHE = ();
 
@@ -61,7 +61,7 @@ values for the variables and loops declared in the template.  This
 allows you to seperate design - the HTML - from the data, which you
 generate in the Perl script.
 
-This module is licenced under the GPL.  See the LICENCE section
+This module is licenced under the GPL.  See the LICENSE section
 below for more details.
 
 =head1 MOTIVATION
@@ -115,7 +115,7 @@ the template is output the <TMPL_VAR> is replaced with the VALUE text
 you specified.  If you don't set a parameter it just gets skipped in
 the output.
 
-The "NAME=" in the tag is optional, although for exensibility's sake I
+The "NAME=" in the tag is optional, although for extensibility's sake I
 recommend using it.  Example - "<TMPL_VAR PARAMETER_NAME>" is
 acceptable.
 
@@ -180,8 +180,20 @@ name=>value pairs for a single pass over the loop template.  It is
 probably in your best interest to build these up programatically, but
 that is up to you!
 
-The "NAME=" in the tag is optional, although for exensibility's sake I
+The "NAME=" in the tag is optional, although for extensibility's sake I
 recommend using it.  Example - "<TMPL_LOOP LOOP_NAME>" is acceptable.
+
+=head2 <TMPL_INCLUDE NAME="filename.tmpl">
+
+This tag includes a template directly into the current template at the
+point where the tag is found.  The included template contents exactly
+as if its contents were physically included in the master template.
+
+The "NAME=" in the tag is optional, although for extensibility's sake I
+recommend using it.  Example - "<TMPL_INCLUDE filename.tmpl>" is
+acceptable.
+
+NOTE: Currently, each <TMPL_INCLUDE> must be on a seperate line by itself.
 
 =cut
 
@@ -196,6 +208,7 @@ Call new() to create a new Template object:
                                     );
 
 You must call new() with at least one name => value pair specifing how
+
 to access the template text.  You can use "filename => 'file.tmpl'" to
 specify a filename to be opened as the template.  Alternately you can
 use:
@@ -250,20 +263,29 @@ STDERR.  Defaults to 0.
 
 die_on_bad_params - if set to 0 the module will let you call
 $template->param('param_name', 'value') even if 'param_name' doesn't
-exist in the template body.  Be careful with this one - I can't think
-of any situations where this shouldn't be an error.  Defaults to 1.
+exist in the template body.  Defaults to 1.
 
 =item *
 
-cache - if set to 1 the module will cache in memory the parsing of
+cache - if set to 1 the module will cache in memory the parsed
 templates based on the filename parameter and modification date of the
 file.  This only applies to templates opened with the filename
-parameter specified, not the scalarref or arrayref templates.  Note
-that different new() parameter settings do not cause a cache refresh,
-only a change in the modification time of the template will trigger a
-cache refresh.  For most usages this is fine.  My simplistic testing
-shows that setting cache to 1 yields a 50% performance increase, more
-if you use large <TMPL_LOOP>s.  Cache defaults to 0.
+parameter specified, not scalarref or arrayref templates.  Cacheing
+also looks at the modification times of any files included using
+<TMPL_INCLUDE> tags, but again, only if the template is opened with
+filename parameter.  Note that different new() parameter settings do
+not cause a cache refresh, only a change in the modification time of
+the template will trigger a cache refresh.  For most usages this is
+fine.  My simplistic testing shows that setting cache to 1 yields a
+50% performance increase, more if you use large <TMPL_LOOP>s.  Cache
+defaults to 0.
+
+=item *
+
+no_includes - if you know that your template does not have
+TMPL_INCLUDE tags, then you can set no_includes to 1.  This will give
+a small performance gain, since the prepass for include tags can be
+skipped.  Defaults to 0.
 
 =item *
 
@@ -279,36 +301,46 @@ don't worry about this one.  Defaults to 0.
 # open a new template and return an object handle
 sub new {
   my $pkg = shift;
-  my %hash;
-  for (my $x = 0; $x <= $#_; $x += 2) { $hash{lc($_[$x])} = $_[($x + 1)]; }
-  my $self = bless(\%hash, $pkg);
+  my $self; { my %hash; $self = bless(\%hash, $pkg); }
 
-  # set default parameters
-  exists($self->{debug}) || ($self->{debug} = 0);
-  exists($self->{timing}) || ($self->{timing} = 0);
-  exists($self->{cache}) || ($self->{cache} = 0);
-  exists($self->{cache_debug}) || ($self->{cache_debug} = 0);
-  exists($self->{die_on_bad_params}) || ($self->{die_on_bad_params} = 1);
-  exists($self->{vanguard_compatibility_mode}) 
-    || ($self->{vanguard_compatibility_mode} = 0);
+  # the options hash
+  my $options = {};
+  $self->{options} = $options;
 
+  # set default parameters in options hash
+  $options->{debug} = 0;
+  $options->{timing} = 0;
+  $options->{cache} = 0;
+  $options->{cache_debug} = 0;
+  $options->{die_on_bad_params} = 1;
+  $options->{vanguard_compatibility_mode} = 0;
+  $options->{no_includes} = 0;
 
-  # handle the "type" "source" parameter format
-  if (exists($self->{type})) {
-    (exists($self->{source})) || (die "HTML::Template->new() called with 'type' parameter set, but no 'source'!");
-    $self->{$self->{type}} = $self->{source};
+  # load in options supplied to new()
+  for (my $x = 0; $x <= $#_; $x += 2) { 
+    defined($_[($x + 1)]) or die "HTML::Template->new() called with odd number of option parameters - should be of the form option => value";
+    $options->{lc($_[$x])} = $_[($x + 1)]; 
+  }
+
+  # handle the "type", "source" parameter format (does anyone use it?)
+  if (exists($options->{type})) {
+    (exists($options->{source})) || (die "HTML::Template->new() called with 'type' parameter set, but no 'source'!");
+    $options->{$options->{type}} = $options->{source};
+    delete $options->{type};
+    delete $options->{source};
   }
 
   # check for syntax errors:
   my $source_count = 0;
-  (exists($self->{filename})) && ($source_count++);
-  (exists($self->{arrayRef})) && ($source_count++);
-  (exists($self->{scalarRef})) && ($source_count++);
-  if ($source_count > 1) {
-    die "HTML::Template->new called with multiple template sources specified!  A valid call to new() has at most one filename => 'file' OR one scalarRef => \\\$scalar OR one arrayRef = \\\@array.";
+  exists($options->{filename}) and $source_count++;
+  exists($options->{arrayref}) and $source_count++;
+  exists($options->{scalarref}) and $source_count++;
+  if ($source_count != 1) {
+    die "HTML::Template->new called with multiple (or no) template sources specified!  A valid call to new() has exactly one filename => 'file' OR exactly one scalarRef => \\\$scalar OR exactly one arrayRef = \\\@array";    
   }
 
-  ($self->{timing}) && ($self->{start_time} = (times)[0]);
+  # Go!
+  ($options->{timing}) && ($self->{timer}{start_time} = (times)[0]);
   
   # initialize data structures
   $self->_init;
@@ -316,7 +348,7 @@ sub new {
   return $self;
 }
 
-# a few shortcuts, of possible use...
+# a few shortcuts to new(), of possible use...
 sub new_file {
   my $pkg = shift; return $pkg->new('filename', @_);
 }
@@ -331,56 +363,76 @@ sub new_scalar_ref {
 # cacheing of template parse data.
 sub _init {
   my $self = shift;
+  my $options = $self->{options};
 
   $self->{param_values} = {};
 
   # look in the cache to see if we have a cached copy of this template
-  if ($self->{cache} && (exists($self->{filename})) && 
-      (exists($CACHE{$self->{filename}}))) {
-    (-r $self->{filename}) || die("HTML::Template : template file $self->{filename} does not exist or is unreadable.");    
+  if ($options->{cache} && (exists($options->{filename})) && 
+      (exists($CACHE{$options->{filename}}))) {
+    (-r $options->{filename}) || die("HTML::Template : template file $options->{filename} does not exist or is unreadable.");    
     
     # get the modification time
-    my $mtime = (stat($self->{filename}))[9];
-    ($self->{debug}) && (print "Modify time of $mtime for " . $self->{filename} . "\n");
+    my $mtime = (stat($options->{filename}))[9];
+    ($options->{debug}) && (print "Modify time of $mtime for " . $options->{filename} . "\n");
     
     # if the modification time has changed remove the cache entry and
     # re-call $self->_init
-    if ($mtime != $CACHE{$self->{filename}}{mtime}) {
-      delete($CACHE{$self->{filename}});
+    if ($mtime != $CACHE{$options->{filename}}{mtime}) {
+      delete($CACHE{$options->{filename}});
 
-      $self->{cache_debug} and warn "CACHE MISS : $self->{filename} : $mtime";
+      $options->{cache_debug} and warn "CACHE MISS : $options->{filename} : $mtime";
 
       return $self->_init;
-    } else {
-      # else, use the cached values instead of calling _init_template
-      # and _pre_parse.
-
-      $self->{cache_debug} and warn "CACHE HIT : $self->{filename} : $mtime";
-
-      $self->{template} = $CACHE{$self->{filename}}{template};
-      $self->{param_map} = $CACHE{$self->{filename}}{param_map};
-      $self->{loop_heap} = $CACHE{$self->{filename}}{loop_heap};
-      return $self;
     }
+
+    # if the template has includes, check each included file's mtime
+    # and re-call $self->_init if different.  There's no way,
+    # currently, to just re-read one file...
+    if (exists($CACHE{$options->{filename}}{included_mtimes})) {
+      foreach my $filename (keys %{$CACHE{$options->{filename}}{included_mtimes}}) {
+        defined($CACHE{$options->{filename}}{included_mtimes}{$filename}) or next;
+        my $included_mtime = (stat($filename))[9];
+        if ($included_mtime != $CACHE{$options->{filename}}{included_mtimes}{$filename}) {
+          delete($CACHE{$options->{filename}});
+          $options->{cache_debug} and warn "CACHE MISS : $options->{filename} : INCLUDE $filename : $included_mtime";
+          
+          return $self->_init;
+        }
+      }
+    }
+    # else, use the cached values instead of calling _init_template
+    # and _pre_parse.
+    
+    $options->{cache_debug} and warn "CACHE HIT : $options->{filename} : $mtime";
+    
+    $self->{template} = $CACHE{$options->{filename}}{template};
+    $self->{param_map} = $CACHE{$options->{filename}}{param_map};
+    $self->{loop_heap} = $CACHE{$options->{filename}}{loop_heap};
+    (exists($CACHE{$options->{filename}}{included_mtimes})) &&
+      ($self->{included_mtimes} = $CACHE{$options->{filename}}{included_mtimes});
+    return $self;
   }
 
   # init the template and parse data
   $self->_init_template;
-  ($self->{timing}) && ($self->{load_time} = (times)[0]);
+  ($options->{timing}) && ($self->{timer}{load_time} = (times)[0]);
   $self->_pre_parse;
-  ($self->{timing}) && ($self->{parse_time} = (times)[0]);
+  ($options->{timing}) && ($self->{timer}{parse_time} = (times)[0]);
 
   # if we're caching, cache the results of _init_template and _pre_parse
   # for future use
-  if ($self->{cache} && (exists($self->{filename}))) {
-    my $mtime = (stat($self->{filename}))[9];
+  if ($options->{cache} && (exists($options->{filename}))) {
+    my $mtime = (stat($options->{filename}))[9];
 
-    $self->{cache_debug} and warn "CACHE LOAD : $self->{filename} : $mtime";
-
-    $CACHE{$self->{filename}}{mtime} = $mtime;
-    $CACHE{$self->{filename}}{template} = $self->{template};
-    $CACHE{$self->{filename}}{param_map} = $self->{param_map};
-    $CACHE{$self->{filename}}{loop_heap} = $self->{loop_heap};
+    $options->{cache_debug} and warn "CACHE LOAD : $options->{filename} : $mtime";
+    
+    $CACHE{$options->{filename}}{mtime} = $mtime;
+    $CACHE{$options->{filename}}{template} = $self->{template};
+    $CACHE{$options->{filename}}{param_map} = $self->{param_map};
+    $CACHE{$options->{filename}}{loop_heap} = $self->{loop_heap};
+    (exists($self->{included_mtimes})) && 
+      ($CACHE{$options->{filename}}{included_mtimes} = $self->{included_mtimes});
   }
   
   return $self;
@@ -389,13 +441,14 @@ sub _init {
 # initialize the template buffer
 sub _init_template {
   my $self = shift;
+  my $options = $self->{options};
 
-  if (exists($self->{filename})) {    
+  if (exists($options->{filename})) {    
     # check filename param and try to open
-    (-r $self->{filename}) || die("HTML::Template : template file $self->{filename} does not exist or is unreadable.");
+    (-r $options->{filename}) || die("HTML::Template : template file $options->{filename} does not exist or is unreadable.");
 
     # open the file
-    open(TEMPLATE, $self->{filename}) || die("Unable to open file $self->{filename}");
+    open(TEMPLATE, $options->{filename}) || die("Unable to open file $options->{filename}");
 
     # read into the array
     my @templateArray = <TEMPLATE>;
@@ -404,22 +457,69 @@ sub _init_template {
     # copy in the ref
     $self->{template} = \@templateArray;
 
-  } elsif (exists($self->{scalarref})) {
+  } elsif (exists($options->{scalarref})) {
     # split it into an array by line, preserving \n's on all but the
     # last line
-    my @templateArray = split("\n", ${$self->{scalarref}});
+    my @templateArray = split("\n", ${$options->{scalarref}});
     foreach my $line (@templateArray) { $line .= "\n"; }
 
     # copy in the ref
     $self->{template} = \@templateArray;
 
-  } elsif (exists($self->{arrayref})) {
+    delete($options->{scalarref});
+  } elsif (exists($options->{arrayref})) {
     # if we have an array ref, just copy it
     $self->{template} = $self->{arrayref};
 
+    delete($options->{arrayref});
   } else {
     die("HTML::Template : Need to call new with filename, scalarref or arrayref parameter specified.");
   }
+
+  # look for TMPL_INCLUDEs and process them now
+  if (!($options->{no_includes})) {
+    for (my $line_number = 0; $line_number <= $#{$self->{template}}; $line_number++) {
+      my $line = $self->{template}[$line_number];
+      defined($line) or next;
+
+      if ($line =~ /<[tT][mM][pP][lL]_[Ii][Nn][Cc][Ll][Uu][Dd][Ee]\s+(?:[nN][aA][mM][eE]\s*=)?\s*"?([\w\/\.]+)"?\s*>/x) {
+        my $filename = $1;
+
+        # open the file
+        if (!defined(open(TEMPLATE, $filename))) {
+          # try pre-pending the path to the master template.
+          my @path = split('/', $options->{filename});
+          $path[$#path] = $filename;
+          open(TEMPLATE, join('/', @path)) or die "Cannot open included file $filename - also tried " . join('/', @path);
+        }
+
+        # read into the array
+        my @templateArray = <TEMPLATE>;
+        close(TEMPLATE);
+
+        if (!scalar(@templateArray)) { next; }
+
+        # collect mtimes for included files
+        if ($options->{cache}) {
+          $self->{included_mtimes}{$filename} = (stat($filename))[9];
+        }
+
+        # move the existing template lines up to their new locations,
+        # and move the new lines into place.  Using splice like this
+        # favors speed over memory, like much of the module.  If we
+        # ever need to save memory, this would be a prime candidate.
+        my $lines_in_existing_template = scalar(@{$self->{template}});
+        my $lines_in_included_file = scalar(@templateArray);
+        $#{$self->{template}} += $lines_in_included_file;
+
+        my @lines = splice(@{$self->{template}}, ($line_number + 1), ($lines_in_existing_template - $line_number + 1));
+        splice(@{$self->{template}}, ($line_number + 1), (scalar(@templateArray) + scalar(@lines) + 1), (@templateArray, @lines));
+
+        $self->{template}[$line_number] = '';
+      }
+    }
+  }
+
   return $self;
 }
 
@@ -437,10 +537,11 @@ sub _init_template {
 # output().
 sub _pre_parse {
   my $self = shift;
+  my $options = $self->{options};
   
-  ($self->{debug}) && (print "\nIn pre_parse:\n\n");
+  ($options->{debug}) && (print "\nIn pre_parse:\n\n");
 
-  ($self->{timing}) && ($self->{parse_in} = (times)[0]);
+  ($options->{timing}) && ($self->{timer}{parse_in} = (times)[0]);
 
   $self->{param_map} = {};
   $self->{loop_heap} = {};
@@ -451,7 +552,7 @@ sub _pre_parse {
     my $done_with_line = 0;
 
     # handle the old vanguard format
-    if ($self->{vanguard_compatibility_mode}) {
+    if ($options->{vanguard_compatibility_mode}) {
       if ($line =~ s/%([\w]+)%/<TMPL_VAR NAME=$1>/g) {
         $self->{template}[$line_number] = $line;
       }
@@ -466,8 +567,8 @@ sub _pre_parse {
         my $preloop = $1;
         my $name = lc $3;
         my $chunk = $4;
-        ($self->{debug}) && (print "$line_number : saw loop $name\n");
-        ($self->{timing}) && ($self->{loop_in} = (times)[0]);      
+        ($options->{debug}) && (print "$line_number : saw loop $name\n");
+        ($options->{timing}) && ($self->{timer}{loop_in} = (times)[0]);      
         
         # find the end of the loop
         my ($loop_body, $leftover, $pos);
@@ -479,12 +580,12 @@ sub _pre_parse {
           defined($loop_body) && last;
         }
         (defined($loop_body)) || die("HTML::Template : Problem looking for matching </TMPL_LOOP> for <TMPL_LOOP NAME=${name}> : Could not find one!");
-        ($self->{debug}) && (print "Loop $name body: \n$loop_body\n\n");
+        ($options->{debug}) && (print "Loop $name body: \n$loop_body\n\n");
         
         # store the results
         push(@{$self->{loop_heap}{$name}{spot}}, $line_number);
-        push(@{$self->{loop_heap}{$name}{template_object}}, HTML::Template->new( scalarref => \$loop_body, debug => $self->{debug}, die_on_bad_params => $self->{die_on_bad_params} ));
-        
+        push(@{$self->{loop_heap}{$name}{template_object}}, HTML::Template->new( scalarref => \$loop_body, debug => $options->{debug}, die_on_bad_params => $options->{die_on_bad_params}, no_includes => 1 ));
+          
         # if we've got a multiline match we'll need to undef the
         # lines we gobbled for the loop body.
         if ($pos > $line_number) {
@@ -495,10 +596,13 @@ sub _pre_parse {
         
         # now reform $line to remove loop body
         $line = $preloop . ' <TMPL_LOOP NAME=' . $name . ' PLACEHOLDER> ' . $leftover;
-          # donate back the changes
+        # donate back the changes
         $self->{template}[$line_number] = $line;
-        ($self->{timing}) && ($self->{loop_out} = (times)[0]);      
-        ($self->{timing}) && (warn "Loop $name : find time " . ($self->{loop_out} - $self->{loop_in}));
+
+        # tick
+        ($options->{timing}) && ($self->{timer}{loop_out} = (times)[0]);      
+        ($options->{timing}) && (warn "Loop $name : find time " . ($self->{timer}{loop_out} - $self->{timer}{loop_in}));
+
         next;          
       }
 
@@ -513,7 +617,7 @@ sub _pre_parse {
         # set their value initially to undef
         $self->{param_values}{$name} = undef;
         
-        ($self->{debug}) && (print "$line_number : saw $name\n");
+        ($options->{debug}) && (print "$line_number : saw $name\n");
       }
 
       # all done
@@ -593,6 +697,7 @@ param() can be called in three ways
 
 sub param {
   my ($self, $param, $value) = @_;
+  my $options = $self->{options};
 
   if (!defined($param)) {
     # return a list of parameters in this template
@@ -600,7 +705,7 @@ sub param {
   } elsif (!defined($value)) {
     $param = lc($param);
     # check for parameter existence 
-    if ($self->{die_on_bad_params} && !exists($self->{param_map}{$param})
+    if ($options->{die_on_bad_params} && !exists($self->{param_map}{$param})
                                     && !exists($self->{loop_heap}{$param})) {
       die("HTML::Template : Attempt to set nonexistent parameter $param");
     }
@@ -610,7 +715,7 @@ sub param {
   } else {
     $param = lc($param);
     # check that this param exists in the template
-    if ($self->{die_on_bad_params} && !exists($self->{param_map}{$param})
+    if ($options->{die_on_bad_params} && !exists($self->{param_map}{$param})
                                     && !exists($self->{loop_heap}{$param})) {
       die("HTML::Template : Attempt to set nonexistent parameter $param");
     }
@@ -643,6 +748,55 @@ sub clear_params {
   }
 }
 
+=head2 associateCGI()
+
+associateCGI() "associates" an object created with the CGI.pm standard module
+with the $template object, so that you don't have to make calls like:
+
+    # assume that the current web program is being called from a page
+    # with a form that has an input tag that looks like:
+    # <INPUT TYPE=HIDDEN NAME=FormField VALUE="Hello, World!">
+    $cgi = new CGI;
+    $template->param('FormField', $cgi->param('FormField'));
+
+Instead, you can just do this:
+
+    $cgi = new CGI;
+    $template->associateCGI($cgi);
+
+Now, $template->output() will act as though 
+
+    $template->param('FormField', $cgi->param('FormField'));
+
+had been specified for each key/value pair that would be provided by 
+the $cgi->param() method.
+
+If the $cgi has the 'foo' parameter, and you also chose to declare:
+
+    $template->param('foo', 'bar');
+
+then the 'foo' param declared with $template->param() will take precedence.
+
+Note that, internally, HTML::Template::associateCGI() works with a ref to the
+CGI object passed to it.  So, if you go around modifying parameters in
+the original CGI object, these changes will be reflected in the output that
+HTML::Template::output produces. (Unless, of course, you modify the params
+in the CGI object _after_ calling $template->output()!)
+
+=cut
+
+sub associateCGI { 
+  my $self = shift;
+  my $cgi  = shift;
+  
+  (ref($cgi) eq 'CGI') ||
+    die("Warning! non-CGI object was passed to HTML::Template::associateCGI()!\n");
+
+  $self->{CGI} = $cgi;
+  return 1;
+}
+
+
 =head2 output()
 
 output() returns the final result of the template.  In most situations you'll want to print this, like:
@@ -662,8 +816,10 @@ important for the internal implementation of loops.
 
 sub output {
   my $self = shift;
-  ($self->{timing}) && ($self->{output_in_time} = (times)[0]);
-  ($self->{debug}) && (print "\nIn output\n\n");
+  my $options = $self->{options};
+
+  ($options->{timing}) && ($self->{timer}{output_in_time} = (times)[0]);
+  ($options->{debug}) && (print "\nIn output\n\n");
 
   # keep a hash of lines changed in the replace loop
   my %templateChanges;
@@ -672,7 +828,15 @@ sub output {
   # works by following the param_map for each named param
   foreach my $name (keys %{$self->{param_map}}) {
     my $value = $self->{param_values}{$name};
-    ($self->{debug} && !defined($value)) && (print "parameter $name not set at output()\n");
+
+    # support the associateCGI() magic.
+    if ( ! $value ) {
+      if ( defined $self->{CGI} ) {
+        $value = $self->{CGI}->param($name);
+      }
+    }
+
+    ($options->{debug} && !defined($value)) && (print "parameter $name not set at output()\n");
     (defined($value)) || ($value = '');
     
     # visit each spot on the map and do a replace into templateChanges
@@ -680,14 +844,14 @@ sub output {
       defined($templateChanges{$spot}) 
         || ($templateChanges{$spot} = $self->{template}[$spot]);
       my $found = ($templateChanges{$spot} =~ s/<tmpl_var\s+(name\s*=)?\s*"?${name}"?\s*>/$value/sgi);
-      ($self->{debug}) && (print "matched $name $found times at $spot\n");
+      ($options->{debug}) && (print "matched $name $found times at $spot\n");
     }
   }
 
   # handle the loops
   foreach my $name (keys %{$self->{loop_heap}}) {
     my $valueARef = $self->{param_values}{$name};
-    ($self->{debug} && !defined($valueARef)) && (print "parameter $name not set at output()\n");
+    ($options->{debug} && !defined($valueARef)) && (print "parameter $name not set at output()\n");
     (defined($valueARef)) || ($valueARef = undef);
     
     # visit each spot on the map and do a looping output() on the loop
@@ -709,7 +873,7 @@ sub output {
         $tobj->clear_params();
       }
       my $found = ($templateChanges{$spot} =~ s/<tmpl_loop\s+name\s*=\s*"?${name}"?\s*PLACEHOLDER>/$loop_output/i);
-      ($self->{debug}) && (print "matched loop $name $found times at $spot\n");
+      ($options->{debug}) && (print "matched loop $name $found times at $spot\n");
     }
   }
 
@@ -724,12 +888,12 @@ sub output {
   }
 
   # warn a little timing information if timing => 1
-  if ($self->{timing}) {
+  if ($options->{timing}) {
     $self->{output_out_time} = (times)[0];
-    warn "Loaded Template at: " . ($self->{load_time} - $self->{start_time});
-    warn "Parsed Template at: " . ($self->{parse_time} - $self->{start_time});
-    warn "Params Loaded   at: " . ($self->{output_in_time} - $self->{start_time});
-    warn "Output Done     at: " . ($self->{output_out_time} - $self->{start_time});
+    warn "Loaded Template at: " . ($self->{timer}{load_time} - $self->{timer}{start_time});
+    warn "Parsed Template at: " . ($self->{timer}{parse_time} - $self->{timer}{start_time});
+    warn "Params Loaded   at: " . ($self->{timer}{output_in_time} - $self->{timer}{start_time});
+    warn "Output Done     at: " . ($self->{timer}{output_out_time} - $self->{timer}{start_time});
   }
 
   return $result;
@@ -741,9 +905,9 @@ __END__
 
 =head1 BUGS
 
-Other than that I am aware of no bugs - if you find one, email me
-(sam@tregar.com) with full details, including the VERSION of the
-module and a test script / test template demonstrating the problem.
+I am aware of no bugs - if you find one, email me (sam@tregar.com)
+with full details, including the VERSION of the module and a test
+script / test template demonstrating the problem.
 
 =head1 CREDITS
 
@@ -751,13 +915,17 @@ This module was the brain child of my boss, Jesse Erlbaum
 (jesse@vm.com) here at Vanguard Media.  The most original idea in this
 module - the <TMPL_LOOP> - was entirely his.
 
-Fixes, Bug Reports and Optomizations have been generously provided by:
+Fixes, Bug Reports, Optimizations and Ideas have been generously
+provided by:
 
    Richard Chen
    Mike Blazer
    Adriano Nagelschmidt Rodrigues
    Andrej Mikus
    Ilya Obshadko
+   Kevin Puetz
+   Steve Reppucci
+   Richard Dice
 
 Thanks!
 
@@ -765,11 +933,7 @@ Thanks!
 
 Sam Tregar, sam@tregar.com
 
-I'll be out of email range (in Tunisia!) from June 27th to July 20th
-of 1999.  During this period bugs and suggestions can be sent to my
-boss here at Vanguard - Jesse (jesse@belfrey.net).
-
-=head1 LICENCE
+=head1 LICENSE
 
 HTML::Template : A module for using HTML Templates with Perl
 

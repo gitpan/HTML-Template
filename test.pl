@@ -6,7 +6,7 @@
 # Change 1..1 below to 1..last_test_to_print .
 # (It may become useful if the test is moved to ./t subdirectory.)
 
-BEGIN { $| = 1; print "1..4\n"; }
+BEGIN { $| = 1; print "1..8\n"; }
 END {print "not ok 1\n" unless $loaded;}
 use HTML::Template;
 $loaded = 1;
@@ -102,5 +102,43 @@ $template = HTML::Template->new(
                                   );
 my $output =  $template->output;
 print "ok 6\n";
+
+# test a template with TMPL_INCLUDE
+$template = HTML::Template->new(
+                                filename => 'templates/include.tmpl',
+                               );
+my $output =  $template->output;
+if (!($output =~ /5/) || !($output =~ /6/)) {
+  die "not ok 7\n";
+} else {
+  print "ok 7\n";
+}
+
+# test a template with TMPL_INCLUDE and cacheing.
+$template = HTML::Template->new(
+                                filename => 'templates/include.tmpl',
+                                cache => 1,
+                                # cache_debug => 1
+                               );
+my $output =  $template->output;
+if (!($output =~ /5/) || !($output =~ /6/)) {
+  die "not ok 8\n";
+} 
+
+# stimulates a cache miss
+# system('touch templates/included2.tmpl');
+
+my $template2 = HTML::Template->new(
+                                    filename => 'templates/include.tmpl',
+                                    cache => 1,
+                                    # cache_debug => 1
+                                   );
+my $output =  $template->output;
+if (!($output =~ /5/) || !($output =~ /6/)) {
+  die "not ok 8\n";
+} else {
+  print "ok 8\n";
+}
+
 
 
