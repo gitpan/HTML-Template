@@ -41,3 +41,6 @@ Revision history for Perl extension HTML::Template.
         - Cleaned up internal access to new() options.
         - more bug fixes from such notables as Kevin Puetz, and Steve
           Reppucci.       
+
+0.051
+        - small problem with make test fixed.

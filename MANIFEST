@@ -8,6 +8,9 @@ templates/simple-loop.tmpl
 templates/medium.tmpl
 templates/simple-loop-nonames.tmpl
 templates/long_loops.tmpl
+templates/include.tmpl
+templates/included.tmpl
+templates/included2.tmpl
 README
 LICENSE
 

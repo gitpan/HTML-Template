@@ -2,7 +2,7 @@ package HTML::Template;
 
 use strict;
 use vars qw( $VERSION %CACHE );
-$VERSION = 0.05;
+$VERSION = 0.051;
 
 %HTML::Template::CACHE = ();
 
