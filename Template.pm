@@ -1,6 +1,6 @@
 package HTML::Template;
 
-$HTML::Template::VERSION = '2.2';
+$HTML::Template::VERSION = '2.3';
 
 =head1 NAME
 
@@ -101,9 +101,7 @@ better.  And it's pretty fast.
 =head1 The Tags
 
 Note: even though these tags look like HTML they are a little
-different in a couple of ways.  First, they must appear entirely on
-one line.  Second, they're allowed to "break the rules".  Something
-like:
+different - they're allowed to "break the rules".  Something like:
 
    <IMG SRC="<TMPL_VAR NAME=IMAGE_SRC>">
 
@@ -405,7 +403,12 @@ every case you'll want to use the filename parameter.  If you're
 worried about all the disk access from reading a template file just
 use mod_perl and the cache option detailed below.
 
-The three new() calling methods can also be accessed as below, if you
+You can also read the template from an already opened filehandle,
+either traditionally as a glob or as a FileHandle:
+
+  my $t = HTML::Template->new( filehandle => *FH, option => 'value');
+
+The four new() calling methods can also be accessed as below, if you
 prefer.
 
   my $t = HTML::Template->new_file('file.tmpl', option => 'value');
@@ -414,6 +417,9 @@ prefer.
                                         option => 'value');
 
   my $t = HTML::Template->new_array_ref($ref_to_array_of_lines, 
+                                       option => 'value');
+
+  my $t = HTML::Template->new_filehandle($fh, 
                                        option => 'value');
 
 And as a final option, for those that might prefer it, you can call new as:
@@ -738,15 +744,12 @@ filter receieve the template text as an array of lines rather than as
 a single scalar.  To do that you need to specify your filter using a
 hash-ref.  In this form you specify the filter using the "sub" key and
 the desired argument format using the "format" key.  The available
-formats are "scalar" and "array".
+formats are "scalar" and "array".  Using the "array" format will incur
+a performance penalty but may be more convenient in some situations.
 
    my $template = HTML::Template->new(filename => 'zap.tmpl',
                                       filter => { sub => $filter,
                                                   format => 'array' });
-
-Using the 'array' format is likely to be more efficient since this is
-how HTML::Template stores the template text internally.  This may
-change in the future.
 
 You may also have multiple filters.  This allows simple filters to be
 combined for more elaborate functionality.  To do this you specify an
@@ -904,8 +907,9 @@ sub new {
   if (exists($options->{type})) {
     exists($options->{source}) or croak("HTML::Template->new() called with 'type' parameter set, but no 'source'!");
     ($options->{type} eq 'filename' or $options->{type} eq 'scalarref' or
-     $options->{type} eq 'arrayref') or
-       croak("HTML::Template->new() : type parameter must be set to 'filename', 'arrayref' or 'scalarref'!");
+     $options->{type} eq 'arrayref' or $options->{type} eq 'filehandle') or
+       croak("HTML::Template->new() : type parameter must be set to 'filename', 'arrayref', 'scalarref' or 'filehandle'!");
+
     $options->{$options->{type}} = $options->{source};
     delete $options->{type};
     delete $options->{source};
@@ -936,10 +940,11 @@ sub new {
   # check for syntax errors:
   my $source_count = 0;
   exists($options->{filename}) and $source_count++;
+  exists($options->{filehandle}) and $source_count++;
   exists($options->{arrayref}) and $source_count++;
   exists($options->{scalarref}) and $source_count++;
   if ($source_count != 1) {
-    croak("HTML::Template->new called with multiple (or no) template sources specified!  A valid call to new() has exactly one filename => 'file' OR exactly one scalarRef => \\\$scalar OR exactly one arrayRef => \\\@array");    
+    croak("HTML::Template->new called with multiple (or no) template sources specified!  A valid call to new() has exactly one filename => 'file' OR exactly one scalarref => \\\$scalar OR exactly one arrayref => \\\@array OR exactly one filehandle => \*FH");
   }
 
   # do some memory debugging - this is best started as early as possible
@@ -1042,6 +1047,9 @@ sub _new_from_loop {
 # a few shortcuts to new(), of possible use...
 sub new_file {
   my $pkg = shift; return $pkg->new('filename', @_);
+}
+sub new_filehandle {
+  my $pkg = shift; return $pkg->new('filehandle', @_);
 }
 sub new_array_ref {
   my $pkg = shift; return $pkg->new('arrayref', @_);
@@ -1497,37 +1505,36 @@ sub _init_template {
         unless defined(open(TEMPLATE, $filepath));
     $self->{mtime} = $self->_mtime($filepath);
 
-      # read into the array, note the mtime for the record
-    my @templateArray = <TEMPLATE>;
+    # read into scalar, note the mtime for the record
+    $self->{template} = "";
+    while (read(TEMPLATE, $self->{template}, 10240, length($self->{template}))) {}
     close(TEMPLATE);
 
-    # copy in the ref
-    $self->{template} = \@templateArray;
-    
   } elsif (exists($options->{scalarref})) {
-    # split it into an array by line, preserving \n's on all but the
-    # last line
-    my @templateArray = split("\n", ${$options->{scalarref}});
-    foreach my $line (@templateArray) { $line .= "\n"; }
-
-    # copy in the ref
-    $self->{template} = \@templateArray;
+    # copy in the template text
+    $self->{template} = ${$options->{scalarref}};
 
     delete($options->{scalarref});
   } elsif (exists($options->{arrayref})) {
-    # if we have an array ref, copy in the contents (thanks David!)
-    $self->{template} = [ @{$options->{arrayref}} ];
+    # if we have an array ref, join and store the template text
+    $self->{template} = join("", @{$options->{arrayref}});
 
     delete($options->{arrayref});
+  } elsif (exists($options->{filehandle})) {
+    # just read everything in in one go
+    local $/ = undef;
+    $self->{template} = readline($options->{filehandle});
+
+    delete($options->{filehandle});
   } else {
-    confess("HTML::Template : Need to call new with filename, scalarref or arrayref parameter specified.");
+    confess("HTML::Template : Need to call new with filename, filehandle, scalarref or arrayref parameter specified.");
   }
 
   print STDERR "### HTML::Template Memory Debug ### END INIT_TEMPLATE ", $self->{proc_mem}->size(), "\n"
     if $options->{memory_debug};
 
   # handle filters if necessary
-  $self->_call_filters($self->{template}) if @{$options->{filter}};
+  $self->_call_filters(\$self->{template}) if @{$options->{filter}};
 
   return $self;
 }
@@ -1535,21 +1542,21 @@ sub _init_template {
 # handle calling user defined filters
 sub _call_filters {
   my $self = shift;
-  my $template = shift;
+  my $template_ref = shift;
   my $options = $self->{options};
 
-  my ($format, $sub, $template_scalar);
+  my ($format, $sub);
   foreach my $filter (@{$options->{filter}}) {
     croak("HTML::Template->new() : bad value set for filter parameter - must be a code ref or a hash ref.")
       unless ref $filter;
 
     # translate into CODE->HASH
-    $filter = { format => 'scalar', sub => $filter }
+    $filter = { 'format' => 'scalar', 'sub' => $filter }
       if (ref $filter eq 'CODE');
 
     if (ref $filter eq 'HASH') {
-      $format = $filter->{format};
-      $sub = $filter->{sub};
+      $format = $filter->{'format'};
+      $sub = $filter->{'sub'};
 
       # check types and values
       croak("HTML::Template->new() : bad value set for filter parameter - hash must contain \"format\" key and \"sub\" key.")
@@ -1562,16 +1569,15 @@ sub _call_filters {
       # catch errors
       eval {
         if ($format eq 'scalar') {
-          # modulate
-          $template_scalar = join('', @$template);
           # call
-          $sub->(\$template_scalar);
-          # demodulate
-          @$template = split("\n", $template_scalar);
-          foreach my $line (@$template) { $line .= "\n"; }
+          $sub->($template_ref);
         } else {
+	  # modulate
+	  my @array = map { $_."\n" } split("\n", $$template_ref);
           # call
-          $sub->($template);
+          $sub->(\@array);
+	  # demodulate
+	  $$template_ref = join("", @array);
         }
       };
       croak("HTML::Template->new() : fatal error occured during filter call: $@") if $@;
@@ -1580,7 +1586,7 @@ sub _call_filters {
     }
   }
   # all done
-  return $template;
+  return $template_ref;
 }
 
 # _parse sifts through a template building up the param_map and
@@ -1642,8 +1648,8 @@ sub _parse {
   local (*fcounter, *fname, *fmax);
 
   my @fstack = ([$options->{filename} || "main template", 
-                 0, 
-                 scalar @{$self->{template}}
+                 1, 
+                 scalar @{[$self->{template} =~ m/(\n)/g]} + 1
                 ]);
   (*fname, *fcounter, *fmax) = \ ( @{$fstack[0]} );
 
@@ -1656,36 +1662,28 @@ sub _parse {
     qw(TMPL_VAR TMPL_LOOP TMPL_IF TMPL_UNLESS TMPL_INCLUDE);
     
   # variables used below that don't need to be my'd in the loop
-  my ($name, $which, $escape, $post);
+  my ($name, $which, $escape);
 
-  # loop through lines, filling up pstack
-  my $last_line =  $#{$self->{template}};
- LINE: for (my $line_number = 0; $line_number <= $last_line; $line_number++) {
-    next unless defined $self->{template}[$line_number]; 
-    my $line = $self->{template}[$line_number];
+  # handle the old vanguard format
+  $options->{vanguard_compatibility_mode} and 
+    $self->{template} =~ s/%([-\w\/\.+]+)%/<TMPL_VAR NAME=$1>/g;
 
-    # next line in the current file too
-    $fcounter++;
+  # now split up template on '<', leaving them in
+  my @chunks = split(m/(?=<)/, $self->{template});
 
-    # make sure we aren't infinitely recursing
-    die "HTML::Template->new() : likely recursive includes - parsed $options->{max_includes} files deep and giving up (set max_includes higher to allow deeper recursion)." if ($options->{max_includes} and (scalar(@fstack) > $options->{max_includes}));
+  # all done with template
+  delete $self->{template};
 
-    # if we just crossed the end of an included file
-    # pop off the record and re-alias to the enclosing file's info
-    pop(@fstack), (*fname, *fcounter, *fmax) = \ ( @{$fstack[$#fstack]} )
-      if ($fcounter > $fmax);
-
-    # handle the old vanguard format
-    $options->{vanguard_compatibility_mode} and 
-      $line =~ s/%([-\w\/\.+]+)%/<TMPL_VAR NAME=$1>/g;
-
-    # make PASSes over the line until nothing is left
-  PASS: while(1) {
-      last PASS unless defined($line);
-      
-      # a general regex to match any and all TMPL_* tags 
-      if ($line =~ /^
-                    (.*?<) # $1 => $pre - text before the tag
+  # loop through chunks, filling up pstack
+  my $last_chunk =  $#chunks;
+ CHUNK: for (my $chunk_number = 0;
+	    $chunk_number <= $last_chunk;
+	    $chunk_number++) {
+    next unless defined $chunks[$chunk_number]; 
+    my $chunk = $chunks[$chunk_number];
+    
+    # a general regex to match any and all TMPL_* tags 
+    if ($chunk =~ /^<
                     (?:!--\s*)?
                     (
                       \/?[Tt][Mm][Pp][Ll]_
@@ -1702,7 +1700,7 @@ sub _parse {
                          |
                          (?:[Ii][Nn][Cc][Ll][Uu][Dd][Ee])
                       )
-                    ) # $2 => $which - start of the tag
+                    ) # $1 => $which - start of the tag
 
                     \s* 
 
@@ -1711,7 +1709,7 @@ sub _parse {
                       [Ee][Ss][Cc][Aa][Pp][Ee]
                       \s*=\s*
                       (?:
-                         ( 0 | (?:"0") | (?:'0') ) # $3 => ESCAPE off
+                         ( 0 | (?:"0") | (?:'0') ) # $2 => ESCAPE off
                          |
                          ( 1 | (?:"1") | (?:'1') | 
                            (?:[Hh][Tt][Mm][Ll]) | 
@@ -1720,7 +1718,7 @@ sub _parse {
                            (?:[Uu][Rr][Ll]) | 
                            (?:"[Uu][Rr][Ll]") |
                            (?:'[Uu][Rr][Ll]') |
-                         )                         # $4 => ESCAPE on
+                         )                         # $3 => ESCAPE on
                        )
                     )* # allow multiple ESCAPEs
 
@@ -1733,11 +1731,11 @@ sub _parse {
                         \s*=\s*
                       )?
                       (?:
-                        "([^">]*)" # $5 => double-quoted NAME value "
+                        "([^">]*)" # $4 => double-quoted NAME value "
                         |
-                        '([^'>]*)' # $6 => single-quoted NAME value
+                        '([^'>]*)' # $5 => single-quoted NAME value
                         |
-                        ([^\s=>]*)  # $7 => unquoted NAME value
+                        ([^\s=>]*)  # $6 => unquoted NAME value
                       )
                     )? 
                     
@@ -1748,7 +1746,7 @@ sub _parse {
                       [Ee][Ss][Cc][Aa][Pp][Ee]
                       \s*=\s*
                       (?:
-                         ( 0 | (?:"0") | (?:'0') ) # $8 => ESCAPE off
+                         ( 0 | (?:"0") | (?:'0') ) # $7 => ESCAPE off
                          |
                          ( 1 | (?:"1") | (?:'1') | 
                            (?:[Hh][Tt][Mm][Ll]) | 
@@ -1757,415 +1755,354 @@ sub _parse {
                            (?:[Uu][Rr][Ll]) | 
                            (?:"[Uu][Rr][Ll]") |
                            (?:'[Uu][Rr][Ll]') |
-                         )                         # $9 => ESCAPE on
+                         )                         # $8 => ESCAPE on
                        )
                     )* # allow multiple ESCAPEs
 
                     \s*
 
                     (?:--)?>                    
-                    (.*) # $10 => $post - text that comes after the tag
-                   $/sgx) {
-        my $pre = $1; # what comes before
-        chop $pre; # remove trailing <
+                    (.*) # $9 => $post - text that comes after the tag
+                   $/sx) {
 
-        $which = uc($2); # which tag is it
+      $which = uc($1); # which tag is it
 
-        $escape = $4 || $9;
-        $escape = 0 if $3 || $8; # ESCAPE=0 
-        $escape = 0 unless defined($escape);
+      $escape = $3 || $8;
+      $escape = 0 if $2 || $7; # ESCAPE=0 
+      $escape = 0 unless defined($escape);
+      
+      # what name for the tag?  undef for a /tag at most, one of the
+      # following three will be defined
+      undef $name;
+      $name = $4 if defined($4);
+      $name = $5 if defined($5);
+      $name = $6 if defined($6);
 
-        # what name for the tag?  undef for a /tag at most, one of the
-        # following three will be defined
-        undef $name;
-        $name = $5 if defined($5);
-        $name = $6 if defined($6);
-        $name = $7 if defined($7);
+      # allow mixed case in filenames, otherwise flatten
+      $name = lc($name) unless ($which eq 'TMPL_INCLUDE' or $options->{case_sensitive});
 
-        # allow mixed case in filenames, otherwise flatten
-        $name = lc($name) unless ($which eq 'TMPL_INCLUDE' or $options->{case_sensitive});
+      my $post = $9; # what comes after on the line
 
-        $post = $10; # what comes after on the line
+      # die if we need a name and didn't get one
+      die "HTML::Template->new() : No NAME given to a $which tag at $fname : line $fcounter." if (!defined($name) and $need_names{$which});
 
-        # die if we need a name and didn't get one
-        die "HTML::Template->new() : No NAME given to a $which tag at $fname : line $fcounter." if (!defined($name) and $need_names{$which});
-
-        # die if we got an escape but can't use one
-        die "HTML::Template->new() : ESCAPE option invalid in a $which tag at $fname : line $fcounter." if ( $escape and ($which ne 'TMPL_VAR'));
+      # die if we got an escape but can't use one
+      die "HTML::Template->new() : ESCAPE option invalid in a $which tag at $fname : line $fcounter." if ( $escape and ($which ne 'TMPL_VAR'));
         
-        # take actions depending on which tag found
-        if ($which eq 'TMPL_VAR') {
-          $options->{debug} and print STDERR "### HTML::Template Debug ### $fname : line $fcounter : parsed VAR $name\n";
+      # take actions depending on which tag found
+      if ($which eq 'TMPL_VAR') {
+	$options->{debug} and print STDERR "### HTML::Template Debug ### $fname : line $fcounter : parsed VAR $name\n";
+	
+	# if we already have this var, then simply link to the existing
+	# HTML::Template::VAR, else create a new one.        
+	my $var;        
+	if (exists $pmap{$name}) {
+	  $var = $pmap{$name};
+	  (ref($var) eq 'HTML::Template::VAR') or
+	    die "HTML::Template->new() : Already used param name $name as a TMPL_LOOP, found in a TMPL_VAR at $fname : line $fcounter.";
+	} else {
+	  $var = HTML::Template::VAR->new();
+	  $pmap{$name} = $var;
+	  $top_pmap{$name} = HTML::Template::VAR->new()
+	    if $options->{global_vars} and not exists $top_pmap{$name};
+	}
+	
+	# if ESCAPE was set, push an ESCAPE op on the stack before
+	# the variable.  output will handle the actual work.
+	if ($escape) {
+	  if ($escape =~ /^"?[Uu][Rr][Ll]"?$/) {
+	    push(@pstack, $URLESCAPE);
+	  } else {
+	    push(@pstack, $ESCAPE);
+	  }
+	}
+	
+	push(@pstack, $var);
+	
+      } elsif ($which eq 'TMPL_LOOP') {
+	# we've got a loop start
+	$options->{debug} and print STDERR "### HTML::Template Debug ### $fname : line $fcounter : LOOP $name start\n";
+	
+	# if we already have this loop, then simply link to the existing
+	# HTML::Template::LOOP, else create a new one.
+	my $loop;
+	if (exists $pmap{$name}) {
+	  $loop = $pmap{$name};
+	  (ref($loop) eq 'HTML::Template::LOOP') or
+	    die "HTML::Template->new() : Already used param name $name as a TMPL_VAR, TMPL_IF or TMPL_UNLESS, found in a TMP_LOOP at $fname : line $fcounter!";
+	  
+	} else {
+	  # store the results in a LOOP object - actually just a
+	  # thin wrapper around another HTML::Template object.
+	  $loop = HTML::Template::LOOP->new();
+	  $pmap{$name} = $loop;
+	}
+	
+	# get it on the loopstack, pstack of the enclosing block
+	push(@pstack, $loop);
+	push(@loopstack, [$loop, $#pstack]);
+	
+	# magic time - push on a fresh pmap and pstack, adjust the typeglobs.
+	# this gives the loop a separate namespace (i.e. pmap and pstack).
+	push(@pstacks, []);
+	*pstack = $pstacks[$#pstacks];
+	push(@pmaps, {});
+	*pmap = $pmaps[$#pmaps];
+	push(@ifstacks, []);
+	*ifstack = $ifstacks[$#ifstacks];
+	push(@ucstacks, []);
+	*ucstack = $ucstacks[$#ucstacks];
+	
+	# auto-vivify __FIRST__, __LAST__ and __INNER__ if
+	# loop_context_vars is set.  Otherwise, with
+	# die_on_bad_params set output() will might cause errors
+	# when it tries to set them.
+	if ($options->{loop_context_vars}) {
+	  $pmap{__first__} = HTML::Template::VAR->new();
+	  $pmap{__inner__} = HTML::Template::VAR->new();
+	  $pmap{__last__} = HTML::Template::VAR->new();
+	  $pmap{__odd__} = HTML::Template::VAR->new();
+	}
+	
+      } elsif ($which eq '/TMPL_LOOP') {
+	$options->{debug} and print STDERR "### HTML::Template Debug ### $fname : line $fcounter : LOOP end\n";
+	
+	my $loopdata = pop(@loopstack);
+	die "HTML::Template->new() : found </TMPL_LOOP> with no matching <TMPL_LOOP> at $fname : line $fcounter!" unless defined $loopdata;
+	
+	my ($loop, $starts_at) = @$loopdata;
+	
+	# resolve pending conditionals
+	foreach my $uc (@ucstack) {
+	  my $var = $uc->[HTML::Template::COND::VARIABLE]; 
+	  if (exists($pmap{$var})) {
+	    $uc->[HTML::Template::COND::VARIABLE] = $pmap{$var};
+	  } else {
+	    $pmap{$var} = HTML::Template::VAR->new();
+	    $top_pmap{$var} = HTML::Template::VAR->new()
+	      if $options->{global_vars} and not exists $top_pmap{$var};
+	    $uc->[HTML::Template::COND::VARIABLE] = $pmap{$var};
+	  }
+	  if (ref($pmap{$var}) eq 'HTML::Template::VAR') {
+	    $uc->[HTML::Template::COND::VARIABLE_TYPE] = HTML::Template::COND::VARIABLE_TYPE_VAR;
+	  } else {
+	    $uc->[HTML::Template::COND::VARIABLE_TYPE] = HTML::Template::COND::VARIABLE_TYPE_LOOP;
+	  }
+	}
+	
+	# get pmap and pstack for the loop, adjust the typeglobs to
+	# the enclosing block.
+	my $param_map = pop(@pmaps);
+	*pmap = $pmaps[$#pmaps];
+	my $parse_stack = pop(@pstacks);
+	*pstack = $pstacks[$#pstacks];
+	
+	scalar(@ifstack) and die "HTML::Template->new() : Dangling <TMPL_IF> or <TMPL_UNLESS> in loop ending at $fname : line $fcounter.";
+	pop(@ifstacks);
+	*ifstack = $ifstacks[$#ifstacks];
+	pop(@ucstacks);
+	*ucstack = $ucstacks[$#ucstacks];
+	
+	# instantiate the sub-Template, feeding it parse_stack and
+	# param_map.  This means that only the enclosing template
+	# does _parse() - sub-templates get their parse_stack and
+	# param_map fed to them already filled in.
+	$loop->[HTML::Template::LOOP::TEMPLATE_HASH]{$starts_at}             
+	  = HTML::Template->_new_from_loop(
+					   parse_stack => $parse_stack,
+					   param_map => $param_map,
+					   debug => $options->{debug}, 
+					   die_on_bad_params => $options->{die_on_bad_params}, 
+					   loop_context_vars => $options->{loop_context_vars},
+					  );
+	
+      } elsif ($which eq 'TMPL_IF' or $which eq 'TMPL_UNLESS' ) {
+	$options->{debug} and print STDERR "### HTML::Template Debug ### $fname : line $fcounter : $which $name start\n";
+	
+	# if we already have this var, then simply link to the existing
+	# HTML::Template::VAR/LOOP, else defer the mapping
+	my $var;        
+	if (exists $pmap{$name}) {
+	  $var = $pmap{$name};
+	} else {
+	  $var = $name;
+	}
+	
+	# connect the var to a conditional
+	my $cond = HTML::Template::COND->new($var);
+	if ($which eq 'TMPL_IF') {
+	  $cond->[HTML::Template::COND::WHICH] = HTML::Template::COND::WHICH_IF;
+	  $cond->[HTML::Template::COND::JUMP_IF_TRUE] = 0;
+	} else {
+	  $cond->[HTML::Template::COND::WHICH] = HTML::Template::COND::WHICH_UNLESS;
+	  $cond->[HTML::Template::COND::JUMP_IF_TRUE] = 1;
+	}
+	
+	# push unconnected conditionals onto the ucstack for
+	# resolution later.  Otherwise, save type information now.
+	if ($var eq $name) {
+	  push(@ucstack, $cond);
+	} else {
+	  if (ref($var) eq 'HTML::Template::VAR') {
+	    $cond->[HTML::Template::COND::VARIABLE_TYPE] = HTML::Template::COND::VARIABLE_TYPE_VAR;
+	  } else {
+	    $cond->[HTML::Template::COND::VARIABLE_TYPE] = HTML::Template::COND::VARIABLE_TYPE_LOOP;
+	  }
+	}
+	
+	# push what we've got onto the stacks
+	push(@pstack, $cond);
+	push(@ifstack, $cond);
+	
+      } elsif ($which eq '/TMPL_IF' or $which eq '/TMPL_UNLESS') {
+	$options->{debug} and print STDERR "### HTML::Template Debug ###$fname : line $fcounter : $which end\n";
+	
+	my $cond = pop(@ifstack);
+	die "HTML::Template->new() : found </${which}> with no matching <TMPL_IF> at $fname : line $fcounter." unless defined $cond;
+	if ($which eq '/TMPL_IF') {
+	  die "HTML::Template->new() : found </TMPL_IF> incorrectly terminating a <TMPL_UNLESS> (use </TMPL_UNLESS>) at $fname : line $fcounter.\n" 
+	    if ($cond->[HTML::Template::COND::WHICH] == HTML::Template::COND::WHICH_UNLESS);
+	} else {
+	  die "HTML::Template->new() : found </TMPL_UNLESS> incorrectly terminating a <TMPL_IF> (use </TMPL_IF>) at $fname : line $fcounter.\n" 
+	    if ($cond->[HTML::Template::COND::WHICH] == HTML::Template::COND::WHICH_IF);
+	}
+	
+	# connect the matching to this "address" - place a NOOP to
+	# hold the spot.  This allows output() to treat an IF in the
+	# assembler-esque "Conditional Jump" mode.
+	push(@pstack, $NOOP);
+	$cond->[HTML::Template::COND::JUMP_ADDRESS] = $#pstack;
+	
+      } elsif ($which eq 'TMPL_ELSE') {
+	$options->{debug} and print STDERR "### HTML::Template Debug ### $fname : line $fcounter : ELSE\n";
+	
+	my $cond = pop(@ifstack);
+	die "HTML::Template->new() : found <TMPL_ELSE> with no matching <TMPL_IF> or <TMPL_UNLESS> at $fname : line $fcounter." unless defined $cond;
+	
+	
+	my $else = HTML::Template::COND->new($cond->[HTML::Template::COND::VARIABLE]);
+	$else->[HTML::Template::COND::WHICH] = $cond->[HTML::Template::COND::WHICH];
+	$else->[HTML::Template::COND::JUMP_IF_TRUE] = not $cond->[HTML::Template::COND::JUMP_IF_TRUE];
+	
+	# need end-block resolution?
+	if (defined($cond->[HTML::Template::COND::VARIABLE_TYPE])) {
+	  $else->[HTML::Template::COND::VARIABLE_TYPE] = $cond->[HTML::Template::COND::VARIABLE_TYPE];
+	} else {
+	  push(@ucstack, $else);
+	}
+	
+	push(@pstack, $else);
+	push(@ifstack, $else);
+	
+	# connect the matching to this "address" - thus the if,
+	# failing jumps to the ELSE address.  The else then gets
+	# elaborated, and of course succeeds.  On the other hand, if
+	# the IF fails and falls though, output will reach the else
+	# and jump to the /if address.
+	$cond->[HTML::Template::COND::JUMP_ADDRESS] = $#pstack;
+	
+      } elsif ($which eq 'TMPL_INCLUDE') {
+	# handle TMPL_INCLUDEs
+	$options->{debug} and print STDERR "### HTML::Template Debug ### $fname : line $fcounter : INCLUDE $name \n";
+	
+	# no includes here, bub
+	$options->{no_includes} and croak("HTML::Template : Illegal attempt to use TMPL_INCLUDE in template file : (no_includes => 1)");
+	
+	my $filename = $name;
+	
+	# look for the included file...
+	my @path = split('/', $options->{filepath});
+	my $filepath;
+	if ($options->{search_path_on_include} or not @path) {
+	  $filepath = $self->_find_file($filename);
+	} else {
+	  $filepath = $self->_find_file($filename, \@path);
+	}
+	die "HTML::Template->new() : Cannot open included file $filename : file not found."
+	  unless defined($filepath);
+	die "HTML::Template->new() : Cannot open included file $filename : $!"
+	  unless defined(open(TEMPLATE, $filepath));              
+	
+	# read into the array
+	my $included_template = "";
+        while(read(TEMPLATE, $included_template, 10240, length($included_template))) {}
+	close(TEMPLATE);
+	
+	# call filters if necessary
+	$self->_call_filters(\$included_template) if @{$options->{filter}};
+	
+	if ($included_template) { # not empty
+	  # handle the old vanguard format - this needs to happen here
+	  # since we're not about to do a next CHUNKS.
+	  $options->{vanguard_compatibility_mode} and 
+	    $included_template =~ s/%([-\w\/\.+]+)%/<TMPL_VAR NAME=$1>/g;
+	  
+	  # collect mtimes for included files
+	  if ($options->{cache} and !$options->{blind_cache}) {
+	    $self->{included_mtimes}{$filepath} = (stat($filepath))[9];
+	  }
+	  
+	  # adjust the fstack to point to the included file info
+	  push(@fstack, [$filepath, 1,
+			 scalar @{[$included_template =~ m/(\n)/g]} + 1]);
+	  (*fname, *fcounter, *fmax) = \ ( @{$fstack[$#fstack]} );
+	  
+          # make sure we aren't infinitely recursing
+          die "HTML::Template->new() : likely recursive includes - parsed $options->{max_includes} files deep and giving up (set max_includes higher to allow deeper recursion)." if ($options->{max_includes} and (scalar(@fstack) > $options->{max_includes}));
           
-          # if we already have this var, then simply link to the existing
-          # HTML::Template::VAR, else create a new one.        
-          my $var;        
-          if (exists $pmap{$name}) {
-            $var = $pmap{$name};
-            (ref($var) eq 'HTML::Template::VAR') or
-              die "HTML::Template->new() : Already used param name $name as a TMPL_LOOP, found in a TMPL_VAR at $fname : line $fcounter.";
-          } else {
-            $var = HTML::Template::VAR->new();
-            $pmap{$name} = $var;
-            $top_pmap{$name} = HTML::Template::VAR->new()
-              if $options->{global_vars} and not exists $top_pmap{$name};
-          }
+	  # stick the remains of this chunk onto the bottom of the
+	  # included text.
+	  $included_template .= $post;
+	  $post = undef;
+	  
+	  # move the new chunks into place.  
+	  splice(@chunks, $chunk_number, 1,
+		 split(m/(?=<)/, $included_template));
 
-          # push text coming before the tag onto the pstack,
-          # concatenating with preceding text if possible.
-          if (ref($pstack[$#pstack]) eq 'SCALAR') {
-            ${$pstack[$#pstack]} .= $pre;
-          } else {
-            push(@pstack, \$pre);
-          }
+	  # recalculate stopping point
+	  $last_chunk = $#chunks;
 
-          # if ESCAPE was set, push an ESCAPE op on the stack before
-          # the variable.  output will handle the actual work.
-          if ($escape) {
-            if ($escape =~ /^"?[Uu][Rr][Ll]"?$/) {
-              push(@pstack, $URLESCAPE);
-            } else {
-              push(@pstack, $ESCAPE);
-            }
-          }
-          
-          push(@pstack, $var);
+	  # start in on the first line of the included text - nothing
+	  # else to do on this line.
+	  $chunk = $chunks[$chunk_number];
 
-          # keep working on line
-          $line = $post;         
-          next PASS;          
-        
-        } elsif ($which eq 'TMPL_LOOP') {
-         # we've got a loop start
-          $options->{debug} and print STDERR "### HTML::Template Debug ### $fname : line $fcounter : LOOP $name start\n";
-          
-          # if we already have this loop, then simply link to the existing
-          # HTML::Template::LOOP, else create a new one.
-          my $loop;
-          if (exists $pmap{$name}) {
-            $loop = $pmap{$name};
-            (ref($loop) eq 'HTML::Template::LOOP') or
-              die "HTML::Template->new() : Already used param name $name as a TMPL_VAR, TMPL_IF or TMPL_UNLESS, found in a TMP_LOOP at $fname : line $fcounter!";
-            
-          } else {
-            # store the results in a LOOP object - actually just a
-            # thin wrapper around another HTML::Template object.
-            $loop = HTML::Template::LOOP->new();
-            $pmap{$name} = $loop;
-          }
-
-          # push text coming before the tag onto the pstack,
-          # concatenating with preceding text if possible.
-          if (ref($pstack[$#pstack]) eq 'SCALAR') {
-            ${$pstack[$#pstack]} .= $pre;
-          } else {
-            push(@pstack, \$pre);
-          }
-
-          # get it on the loopstack, pstack of the enclosing block
-          push(@pstack, $loop);
-          push(@loopstack, [$loop, $#pstack]);
-
-          # magic time - push on a fresh pmap and pstack, adjust the typeglobs.
-          # this gives the loop a separate namespace (i.e. pmap and pstack).
-          push(@pstacks, []);
-          *pstack = $pstacks[$#pstacks];
-          push(@pmaps, {});
-          *pmap = $pmaps[$#pmaps];
-          push(@ifstacks, []);
-          *ifstack = $ifstacks[$#ifstacks];
-          push(@ucstacks, []);
-          *ucstack = $ucstacks[$#ucstacks];
-
-          # auto-vivify __FIRST__, __LAST__ and __INNER__ if
-          # loop_context_vars is set.  Otherwise, with
-          # die_on_bad_params set output() will might cause errors
-          # when it tries to set them.
-          if ($options->{loop_context_vars}) {
-            $pmap{__first__} = HTML::Template::VAR->new();
-            $pmap{__inner__} = HTML::Template::VAR->new();
-            $pmap{__last__} = HTML::Template::VAR->new();
-            $pmap{__odd__} = HTML::Template::VAR->new();
-          }
-
-          # keep working on the rest
-          $line = $post;
-          next PASS;
-
-        } elsif ($which eq '/TMPL_LOOP') {
-          $options->{debug} and print STDERR "### HTML::Template Debug ### $fname : line $fcounter : LOOP end\n";
-          
-          my $loopdata = pop(@loopstack);
-          die "HTML::Template->new() : found </TMPL_LOOP> with no matching <TMPL_LOOP> at $fname : line $fcounter!" unless defined $loopdata;
-
-          my ($loop, $starts_at) = @$loopdata;
-                                                     
-          # push text coming before the tag onto the pstack,
-          # concatenating with preceding text if possible.
-          if (ref($pstack[$#pstack]) eq 'SCALAR') {
-            ${$pstack[$#pstack]} .= $pre;
-          } else {
-            push(@pstack, \$pre);
-          }
-
-          # resolve pending conditionals
-          foreach my $uc (@ucstack) {
-            my $var = $uc->[HTML::Template::COND::VARIABLE]; 
-            if (exists($pmap{$var})) {
-              $uc->[HTML::Template::COND::VARIABLE] = $pmap{$var};
-            } else {
-              $pmap{$var} = HTML::Template::VAR->new();
-              $top_pmap{$var} = HTML::Template::VAR->new()
-                if $options->{global_vars} and not exists $top_pmap{$var};
-              $uc->[HTML::Template::COND::VARIABLE] = $pmap{$var};
-            }
-            if (ref($pmap{$var}) eq 'HTML::Template::VAR') {
-              $uc->[HTML::Template::COND::VARIABLE_TYPE] = HTML::Template::COND::VARIABLE_TYPE_VAR;
-            } else {
-              $uc->[HTML::Template::COND::VARIABLE_TYPE] = HTML::Template::COND::VARIABLE_TYPE_LOOP;
-            }
-          }
-
-          # get pmap and pstack for the loop, adjust the typeglobs to
-          # the enclosing block.
-          my $param_map = pop(@pmaps);
-          *pmap = $pmaps[$#pmaps];
-          my $parse_stack = pop(@pstacks);
-          *pstack = $pstacks[$#pstacks];
-          
-          scalar(@ifstack) and die "HTML::Template->new() : Dangling <TMPL_IF> or <TMPL_UNLESS> in loop ending at $fname : line $fcounter.";
-          pop(@ifstacks);
-          *ifstack = $ifstacks[$#ifstacks];
-          pop(@ucstacks);
-          *ucstack = $ucstacks[$#ucstacks];
-
-          # instantiate the sub-Template, feeding it parse_stack and
-          # param_map.  This means that only the enclosing template
-          # does _parse() - sub-templates get their parse_stack and
-          # param_map fed to them already filled in.
-          $loop->[HTML::Template::LOOP::TEMPLATE_HASH]{$starts_at}             
-            = HTML::Template->_new_from_loop(
-                                             parse_stack => $parse_stack,
-                                             param_map => $param_map,
-                                             debug => $options->{debug}, 
-                                             die_on_bad_params => $options->{die_on_bad_params}, 
-                                             loop_context_vars => $options->{loop_context_vars},
-                                            );
-          
-          # next line
-          $line = $post;
-          next PASS;
-          
-        } elsif ($which eq 'TMPL_IF' or $which eq 'TMPL_UNLESS' ) {
-          $options->{debug} and print STDERR "### HTML::Template Debug ### $fname : line $fcounter : $which $name start\n";
-
-          # if we already have this var, then simply link to the existing
-          # HTML::Template::VAR/LOOP, else defer the mapping
-          my $var;        
-          if (exists $pmap{$name}) {
-            $var = $pmap{$name};
-          } else {
-            $var = $name;
-          }
-
-          # connect the var to a conditional
-          my $cond = HTML::Template::COND->new($var);
-          if ($which eq 'TMPL_IF') {
-            $cond->[HTML::Template::COND::WHICH] = HTML::Template::COND::WHICH_IF;
-            $cond->[HTML::Template::COND::JUMP_IF_TRUE] = 0;
-          } else {
-            $cond->[HTML::Template::COND::WHICH] = HTML::Template::COND::WHICH_UNLESS;
-            $cond->[HTML::Template::COND::JUMP_IF_TRUE] = 1;
-          }
-
-          # push unconnected conditionals onto the ucstack for
-          # resolution later.  Otherwise, save type information now.
-          if ($var eq $name) {
-            push(@ucstack, $cond);
-          } else {
-            if (ref($var) eq 'HTML::Template::VAR') {
-              $cond->[HTML::Template::COND::VARIABLE_TYPE] = HTML::Template::COND::VARIABLE_TYPE_VAR;
-            } else {
-              $cond->[HTML::Template::COND::VARIABLE_TYPE] = HTML::Template::COND::VARIABLE_TYPE_LOOP;
-            }
-          }
-
-          # push text coming before the tag onto the pstack,
-          # concatenating with preceding text if possible.
-          if (ref($pstack[$#pstack]) eq 'SCALAR') {
-            ${$pstack[$#pstack]} .= $pre;
-          } else {
-            push(@pstack, \$pre);
-          }
-
-          # push what we've got onto the stacks
-          push(@pstack, $cond);
-          push(@ifstack, $cond);
-
-          $line = $post;
-          next PASS;
-
-        } elsif ($which eq '/TMPL_IF' or $which eq '/TMPL_UNLESS') {
-          $options->{debug} and print STDERR "### HTML::Template Debug ###$fname : line $fcounter : $which end\n";
-
-          my $cond = pop(@ifstack);
-          die "HTML::Template->new() : found </${which}> with no matching <TMPL_IF> at $fname : line $fcounter." unless defined $cond;
-          if ($which eq '/TMPL_IF') {
-            die "HTML::Template->new() : found </TMPL_IF> incorrectly terminating a <TMPL_UNLESS> (use </TMPL_UNLESS>) at $fname : line $fcounter.\n" 
-              if ($cond->[HTML::Template::COND::WHICH] == HTML::Template::COND::WHICH_UNLESS);
-          } else {
-            die "HTML::Template->new() : found </TMPL_UNLESS> incorrectly terminating a <TMPL_IF> (use </TMPL_IF>) at $fname : line $fcounter.\n" 
-              if ($cond->[HTML::Template::COND::WHICH] == HTML::Template::COND::WHICH_IF);
-          }
-
-          # push text coming before the tag onto the pstack,
-          # concatenating with preceding text if possible.
-          if (ref($pstack[$#pstack]) eq 'SCALAR') {
-            ${$pstack[$#pstack]} .= $pre;
-          } else {
-            push(@pstack, \$pre);
-          }
-
-          # connect the matching to this "address" - place a NOOP to
-          # hold the spot.  This allows output() to treat an IF in the
-          # assembler-esque "Conditional Jump" mode.
-          push(@pstack, $NOOP);
-          $cond->[HTML::Template::COND::JUMP_ADDRESS] = $#pstack;
-          
-          # next line
-          $line = $post;
-          next PASS;
-
-        } elsif ($which eq 'TMPL_ELSE') {
-          $options->{debug} and print STDERR "### HTML::Template Debug ### $fname : line $fcounter : ELSE\n";
-
-          my $cond = pop(@ifstack);
-          die "HTML::Template->new() : found <TMPL_ELSE> with no matching <TMPL_IF> or <TMPL_UNLESS> at $fname : line $fcounter." unless defined $cond;
-          
-          
-          my $else = HTML::Template::COND->new($cond->[HTML::Template::COND::VARIABLE]);
-          $else->[HTML::Template::COND::WHICH] = $cond->[HTML::Template::COND::WHICH];
-          $else->[HTML::Template::COND::JUMP_IF_TRUE] = not $cond->[HTML::Template::COND::JUMP_IF_TRUE];
-          
-          # need end-block resolution?
-          if (defined($cond->[HTML::Template::COND::VARIABLE_TYPE])) {
-            $else->[HTML::Template::COND::VARIABLE_TYPE] = $cond->[HTML::Template::COND::VARIABLE_TYPE];
-          } else {
-            push(@ucstack, $else);
-          }
-
-          # push text coming before the tag onto the pstack,
-          # concatenating with preceding text if possible.
-          if (ref($pstack[$#pstack]) eq 'SCALAR') {
-            ${$pstack[$#pstack]} .= $pre;
-          } else {
-            push(@pstack, \$pre);
-          }
-          push(@pstack, $else);
-          push(@ifstack, $else);
-
-          # connect the matching to this "address" - thus the if,
-          # failing jumps to the ELSE address.  The else then gets
-          # elaborated, and of course succeeds.  On the other hand, if
-          # the IF fails and falls though, output will reach the else
-          # and jump to the /if address.
-          $cond->[HTML::Template::COND::JUMP_ADDRESS] = $#pstack;
-
-          $line = $post;
-          next PASS;
-
-        } elsif ($which eq 'TMPL_INCLUDE') {
-          # handle TMPL_INCLUDEs
-          $options->{debug} and print STDERR "### HTML::Template Debug ### $fname : line $fcounter : INCLUDE $name \n";
-
-          # no includes here, bub
-          $options->{no_includes} and croak("HTML::Template : Illegal attempt to use TMPL_INCLUDE in template file : (no_includes => 1)");
-
-          # push text coming before the tag onto the pstack,
-          # concatenating with preceding text if possible.
-          if (ref($pstack[$#pstack]) eq 'SCALAR') {
-            ${$pstack[$#pstack]} .= $pre;
-          } else {
-            push(@pstack, \$pre);
-          }
-
-          my $filename = $name;
-
-          # look for the included file...
-          my @path = split('/', $options->{filepath});
-          my $filepath;
-          if ($options->{search_path_on_include}) {
-            $filepath = $self->_find_file($filename);
-          } else {
-            $filepath = $self->_find_file($filename, \@path);
-          }
-          die "HTML::Template->new() : Cannot open included file $filename : file not found."
-            unless defined($filepath);
-          die "HTML::Template->new() : Cannot open included file $filename : $!"
-            unless defined(open(TEMPLATE, $filepath));              
-
-          # read into the array
-          my @templateArray = <TEMPLATE>;
-          close(TEMPLATE);
-
-          # call filters if necessary
-          $self->_call_filters(\@templateArray) if @{$options->{filter}};
-
-          $line = $post, next PASS 
-            unless (scalar(@templateArray));
-
-          # collect mtimes for included files
-          if ($options->{cache} and !$options->{blind_cache}) {
-            $self->{included_mtimes}{$filepath} = (stat($filepath))[9];
-          }
-
-          # adjust the fstack to point to the included file info
-          push(@fstack, [$filepath, 1, scalar @templateArray]);
-          (*fname, *fcounter, *fmax) = \ ( @{$fstack[$#fstack]} );
-
-          # stick the remains of this line onto the bottom of the
-          # included text.
-          push(@templateArray, $post);
-          
-          # move the new lines into place.  
-          splice(@{$self->{template}}, $line_number, 1, @templateArray);
-          
-          # recalculate stopping point
-          $last_line = $#{$self->{template}};
-          
-          # start in on the first line of the included text - nothing
-          # else to do on this line.
-          $line = $self->{template}[$line_number];
-
-          # handle the old vanguard format - this needs to happen here
-          # since we're not about to do a next LINE.
-          $options->{vanguard_compatibility_mode} and 
-            $line =~ s/%([-\w\/\.+]+)%/<TMPL_VAR NAME=$1>/g;
-
-          next PASS;
-        } else {
-          # zuh!?
-          die "HTML::Template->new() : Unknown or unmatched TMPL construct at $fname : line $fcounter.";
-        }
-
+	  redo CHUNK;
+	}
       } else {
-        # make sure we didn't reject something TMPL_* but badly formed
-        if ($options->{strict}) {
-          die "HTML::Template->new() : Syntax error in <TMPL_*> tag at $fname : $fcounter." if ($line =~ /<(?:!--\s*)?\/?[Tt][Mm][Pp][Ll]_/);
-        }
-
-        # push the rest and get a new line
-        if (defined($line)) {
-          if (ref($pstack[$#pstack]) eq 'SCALAR') {
-            ${$pstack[$#pstack]} .= $line;
-          } else {
-            push(@pstack, \$line);
-          }
-        }
-        next LINE;
+	# zuh!?
+	die "HTML::Template->new() : Unknown or unmatched TMPL construct at $fname : line $fcounter.";
+      }
+      # push the rest after the tag
+      if (defined($post)) {
+	if (ref($pstack[$#pstack]) eq 'SCALAR') {
+	  ${$pstack[$#pstack]} .= $post;
+	} else {
+	  push(@pstack, \$post);
+	}
+      }
+    } else { # just your ordinary markup
+      # make sure we didn't reject something TMPL_* but badly formed
+      if ($options->{strict}) {
+	die "HTML::Template->new() : Syntax error in <TMPL_*> tag at $fname : $fcounter." if ($chunk =~ /<(?:!--\s*)?\/?[Tt][Mm][Pp][Ll]_/);
+      }
+      
+      # push the rest and get next chunk
+      if (defined($chunk)) {
+	if (ref($pstack[$#pstack]) eq 'SCALAR') {
+	  ${$pstack[$#pstack]} .= $chunk;
+	} else {
+	  push(@pstack, \$chunk);
+	}
       }
     }
-  }
+    # count newlines in chunk and advance line count
+    $fcounter += scalar(@{[$chunk =~ m/(\n)/g]});
+    # if we just crossed the end of an included file
+    # pop off the record and re-alias to the enclosing file's info
+    pop(@fstack), (*fname, *fcounter, *fmax) = \ ( @{$fstack[$#fstack]} )
+      if ($fcounter > $fmax);
+    
+  } # next CHUNK
 
   # make sure we don't have dangling IF or LOOP blocks
   scalar(@ifstack) and die "HTML::Template->new() : At least one <TMPL_IF> or <TMPL_UNLESS> not terminated at end of file!";
@@ -2198,9 +2135,6 @@ sub _parse {
   # get rid of filters - they cause runtime errors if Storable tries
   # to store them.  This can happen under global_vars.
   delete $options->{filter};
-
-  # all done with template
-  delete $self->{template};
 }
 
 # a recursive sub that associates each loop with the loops above
@@ -2768,7 +2702,7 @@ sub output {
   my $loop_context_vars = shift;
   my $template = $self->[TEMPLATE_HASH]{$index};
   my $value_sets_array = $self->[PARAM_SET];
-  next unless defined($value_sets_array);  
+  return unless defined($value_sets_array);  
   
   my $result = '';
   my $count = 0;
@@ -3043,6 +2977,9 @@ provided by:
    William Ward
    Ade Olonoh
    Mark Stosberg
+   Lance Thomas
+   Roland Giersig
+   Jere Julian
 
 Thanks!
 

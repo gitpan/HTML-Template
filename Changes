@@ -186,3 +186,14 @@ Revision history for Perl extension HTML::Template.
       - Bug Fix: fixed file_cache not reloading templates on changes
         (T.J. Mather)
       - Bug Fix: fixed broken error checking in param() (Mark Stosberg)
+
+2.3 Thu June 28 12:00:00 2001
+      - New Feature: template tags can now span lines.  (Roland Giersig)
+      - New Feature: new() option 'filehandle'. (Roland Giersig)
+      - Bug Fix: includes were broken in some cases using scalarref
+        templates. (Lance Thomas)
+      - Bug Fix: recursive include detection was broken for scalarref
+        templates. (Mark Stosberg)
+      - Bug Fix: cleaned up more 5.004 warnings. (Jere Julian)
+
+      

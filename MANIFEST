@@ -30,6 +30,9 @@ templates/loop-context.tmpl
 templates/searchpath/included.tmpl
 templates/include_path/a.tmpl
 templates/include_path/b.tmpl
+templates/multiline_tags.tmpl
+templates/newline_test1.tmpl
+templates/newline_test2.tmpl
 scripts/time_trial.pl
 scripts/clean_shm.pl
 README
