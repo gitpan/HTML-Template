@@ -6,7 +6,7 @@
 # Change 1..1 below to 1..last_test_to_print .
 # (It may become useful if the test is moved to ./t subdirectory.)
 
-BEGIN { $| = 1; print "1..28\n"; }
+BEGIN { $| = 1; print "1..35\n"; }
 END {print "not ok 1\n" unless $loaded;}
 use HTML::Template;
 $loaded = 1;
@@ -385,13 +385,17 @@ $template->param(FRUIT => [
                            {KIND => 'Toes'},
                            {KIND => 'Kiwi'}
                           ]);
+$template->param(PINGPONG => [ {}, {}, {}, {}, {}, {} ]);
 
 $output =  $template->output;
 if ($output !~ /Apples, Oranges, Brains, Toes, and Kiwi./) {
   die "not ok 21\n";
+} elsif ($output !~ /pingpongpingpongpingpong/) {
+  die "not ok 21:\n$output\n";
 } else {
   print "ok 21\n";
 }
+
 
 $template = HTML::Template->new(
                                 path => 'templates',
@@ -631,3 +635,60 @@ unless ($result =~ /foobar/) {
   die "not ok 31\n";
 }
 print "ok 31\n";
+
+$template = HTML::Template->new(                                
+                                path => 'templates',
+                                filename => 'vanguard1.tmpl',
+                                vanguard_compatibility_mode => 1,
+                               );
+$template->param(FOO => 'bar');
+$template->param(BAZ => 'bop');
+$result = $template->output();
+unless ($result =~ /bar/) {
+  die "not ok 32\n";
+} 
+unless ($result =~ /bop/) {
+  die "not ok 32 :\n $result\n";
+} 
+print "ok 32\n";
+
+$template = HTML::Template->new(                           
+                                path => 'templates',
+                                filename => 'loop-context.tmpl',
+                                loop_context_vars => 1,
+                               );
+$template->param(TEST_LOOP => [ { NUM => 1 } ]);
+$result = $template->output();
+if ($result !~ /1:FIRST::LAST:ODD/) {
+  die "not ok 33 :\n$result\n";
+}
+print "ok 33\n";
+
+
+# test a TMPL_INCLUDE from a later path directory back up to an earlier one
+# when using the search_path_on_include option
+$template = HTML::Template->new(
+                                path => ['templates/searchpath/','templates/'],
+                                search_path_on_include => 1,
+                                filename => 'include.tmpl',
+                               );
+$output =  $template->output;
+if (!($output =~ /9/) || !($output =~ /6/)) {
+  die "not ok 34\n";
+} else {
+  print "ok 34\n";
+}
+
+# test no_includes
+eval {
+  $template = HTML::Template->new(
+                                  path => ['templates/'],
+                                  filename => 'include.tmpl',
+                                  no_includes => 1,
+                                 );
+};
+if (not defined $@ or $@ !~ /no_includes/) {
+  die "not ok 35\n";
+} else {
+  print "ok 35\n";
+}

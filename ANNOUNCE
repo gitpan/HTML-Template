@@ -1,25 +1,25 @@
-ANNOUNCEMENT: NEW VERSION: HTML::Template 1.8
+ANNOUNCEMENT: NEW VERSION: HTML::Template 2.0
 
 HTML::Template - a Perl module to use HTML Templates
 
 CHANGES
 
-1.8 
+2.0
 
-- New Feature: global_vars option makes outer variables visible
-  inside loops.
+- New Feature: new 'search_path_on_include' option (Jody Biggs)
 
-- Bug Fix: Use File::Spec to construct pathnames.  This means 
-  that HTML::Template should now work on VMS and MacOS. 
-  (Larry Moore)
+- New Feature: much requested variable __ODD__ added to set of
+  loop_context_vars.
 
-- Bug Fix: loop_context_vars were broken in an unusual case. 
-  (Todd Larason)
+- New Feature: new 'no_includes' option (Scott Guelich)
 
-- Bug Fix: ESCAPE was broken in some cases.
+- Doc Addition: Added link to Japanese translation (Kawai Takanori)
 
-- New License: switched to GPL/Artistic hybrid normally used
-  with Perl modules.
+- Bug Fix: loop_context_vars broken again (T.J. Mather, Martin Schroth
+  and Dave Wolfe)
+
+- Bug Fix: vanguard_compatibility_mode was broken on first line of
+  included files. (uchum)
 
 
 DESCRIPTION
@@ -42,7 +42,7 @@ AVAILABILITY
 
 This module is available on SourceForge.  Download it at:
 
-  http://download.sourceforge.net/HTML-Template/HTML-Template-1.7.tar.gz
+  http://download.sourceforge.net/HTML-Template/HTML-Template-1.9.tar.gz
 
 The module is also available on CPAN.  You can get it using CPAN.pm or
 go to:

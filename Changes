@@ -152,3 +152,16 @@ Revision history for Perl extension HTML::Template.
       - Bug Fix: ESCAPE was broken in some cases.
       - New License: switched to GPL/Artistic hybrid normally used
         with Perl modules.
+
+2.0 Sun September 16 12:00:00 2000 
+      - New Feature: new 'search_path_on_include' option (Jody Biggs)
+      - New Feature: much requested variable __ODD__ added to set of
+        loop_context_vars.
+      - New Feature: new 'no_includes' option (Scott Guelich)
+      - Doc Addition: Added link to Japanese translation (Kawai Takanori)
+      - Bug Fix: loop_context_vars was mostly broken (T.J. Mather, 
+        Martin Schroth and Dave Wolfe)
+      - Bug Fix: vanguard_compatibility_mode was broken on first line of
+        included files. (uchum)
+
+      

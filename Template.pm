@@ -1,6 +1,6 @@
 package HTML::Template;
 
-$HTML::Template::VERSION = '1.8';
+$HTML::Template::VERSION = '2.0';
 
 =head1 NAME
 
@@ -59,6 +59,10 @@ someone else!  Using this module you fill in the values for the
 variables, loops and branches declared in the template.  This allows
 you to separate design - the HTML - from the data, which you generate
 in the Perl script.
+
+A Japanese translation of the documentation is available at:
+
+   http://member.nifty.ne.jp/hippo2000/perltips/html/template.htm
 
 This module is licensed under the GPL.  See the LICENSE section
 below for more details.
@@ -552,14 +556,22 @@ will be chosen randomly by associate.
 =item *
 
 loop_context_vars - when this parameter is set to true (it is false by
-default) three loop context variables are made available inside a
-loop: __FIRST__, __LAST__ and __INNER__.  They can be used with
+default) four loop context variables are made available inside a loop:
+__FIRST__, __LAST__, __INNER__, __ODD__.  They can be used with
 <TMPL_IF>, <TMPL_UNLESS> and <TMPL_ELSE> to control how a loop is
 output.  Example:
 
    <TMPL_LOOP NAME="FOO">
       <TMPL_IF NAME="__FIRST__">
         This only outputs on the first pass.
+      </TMPL_IF>
+
+      <TMPL_IF NAME="__ODD__">
+        This outputs every other pass, on the odd passes.
+      </TMPL_IF>
+
+      <TMPL_UNLESS NAME="__ODD__">
+        This outputs every other pass, on the even passes.
       </TMPL_IF>
 
       <TMPL_IF NAME="__INNER__">
@@ -610,10 +622,24 @@ separated by the forward-slash character ('/').
 
 =item *
 
+no_includes - set this option to 1 to disallow the <TMPL_INCLUDE> tag
+in the template file.  This can be used to make opening untrusted
+templates B<slightly> less dangerous.  Defaults to 0.
+
+=item *
+
 max_includes - set this variable to determine the maximum depth that
 includes can reach.  Set to 10 by default.  Including files to a depth
 greater than this value causes an error message to be displayed.  Set
 to 0 to disable this protection.
+
+=item *
+
+search_path_on_include - if set to a true value the module will search
+from the top of the array of paths specified by the path option on
+every <TMPL_INCLUDE> and use the first matching template found.  The
+normal behavior is to look only in the current directory for a
+template to include.  Defaults to 0.
 
 =item *
 
@@ -713,6 +739,7 @@ sub new {
                debug => 0,
                stack_debug => 0,
                timing => 0,
+               search_path_on_include => 0,
                cache => 0,               
                blind_cache => 0,
                cache_debug => 0,
@@ -732,6 +759,7 @@ sub new {
                ipc_segment_size => 65536,
                ipc_max_size => 0,
                global_vars => 0,
+               no_includes => 0,
               );
   
   # load in options supplied to new()
@@ -795,7 +823,7 @@ sub new {
   # do some memory debugging - this is best started as early as possible
   if ($options->{memory_debug}) {
     # memory_debug needs GTop
-    eval { require 'GTop.pm'; };
+    eval { require GTop; };
     croak("Could not load GTop.  You must have GTop installed to use HTML::Template in memory_debug mode.  The error was: $@")
       if ($@);
     $self->{gtop} = GTop->new();
@@ -805,7 +833,7 @@ sub new {
 
   if ($options->{shared_cache}) {
     # shared_cache needs some extra modules loaded
-    eval { require 'IPC/SharedCache.pm'; };
+    eval { require IPC::SharedCache; };
     croak("Could not load IPC::SharedCache.  You must have IPC::SharedCache installed to use HTML::Template in shared_cache mode.  The error was: $@")
       if ($@);
 
@@ -821,7 +849,7 @@ sub new {
       ipc_segment_size => $options->{ipc_segment_size};
     $self->{cache} = \%cache;
   }
-  
+
   print STDERR "### HTML::Template Memory Debug ### POST CACHE INIT ", $self->{proc_mem}->size(), "\n"
     if $options->{memory_debug};
 
@@ -857,7 +885,7 @@ sub _new_from_loop {
                stack_debug => 0,
                die_on_bad_params => 1,
                associate => [],
-               loop_context_vars => 0,
+               loop_context_vars => 0,               
               );
   
   # load in options supplied to new()
@@ -1177,14 +1205,15 @@ sub _init_template {
       # we'll need this for future reference - to call stat() for example.
       $options->{filepath} = $filepath;   
     }
+
     confess("HTML::Template->new() : Cannot open included file $options->{filename} : $!")
-      unless defined(open(TEMPLATE, $filepath));
-    
-    # read into the array, note the mtime for the record
+        unless defined(open(TEMPLATE, $filepath));
     $self->{mtime} = $self->_mtime($filepath);
+
+      # read into the array, note the mtime for the record
     my @templateArray = <TEMPLATE>;
     close(TEMPLATE);
-  
+
     # copy in the ref
     $self->{template} = \@templateArray;
     
@@ -1515,6 +1544,7 @@ sub _parse {
             $pmap{__first__} = HTML::Template::VAR->new();
             $pmap{__inner__} = HTML::Template::VAR->new();
             $pmap{__last__} = HTML::Template::VAR->new();
+            $pmap{__odd__} = HTML::Template::VAR->new();
           }
 
           # keep working on the rest
@@ -1707,6 +1737,9 @@ sub _parse {
           # handle TMPL_INCLUDEs
           $options->{debug} and print STDERR "### HTML::Template Debug ### $fname : line $fcounter : INCLUDE $name \n";
 
+          # no includes here, bub
+          $options->{no_includes} and croak("HTML::Template : Illegal attempt to use TMPL_INCLUDE in template file : (no_includes => 1)");
+
           # push text coming before the tag onto the pstack,
           # concatenating with preceding text if possible.
           if (ref($pstack[$#pstack]) eq 'SCALAR') {
@@ -1719,16 +1752,21 @@ sub _parse {
 
           # look for the included file...
           my @path = split('/', $options->{filepath});
-          my $filepath = $self->_find_file($filename, \@path);
+          my $filepath;
+          if ($options->{search_path_on_include}) {
+            $filepath = $self->_find_file($filename);
+          } else {
+            $filepath = $self->_find_file($filename, \@path);
+          }
           die "HTML::Template->new() : Cannot open included file $filename : file not found."
             unless defined($filepath);
           die "HTML::Template->new() : Cannot open included file $filename : $!"
             unless defined(open(TEMPLATE, $filepath));              
-      
+
           # read into the array
           my @templateArray = <TEMPLATE>;
           close(TEMPLATE);
-          
+
           $line = $post, next PASS 
             unless (scalar(@templateArray));
 
@@ -1754,6 +1792,12 @@ sub _parse {
           # start in on the first line of the included text - nothing
           # else to do on this line.
           $line = $self->{template}[$line_number];
+
+          # handle the old vanguard format - this needs to happen here
+          # since we're not about to do a next LINE.
+          $options->{vanguard_compatibility_mode} and 
+            $line =~ s/%([-\w\/\.+]+)%/<TMPL_VAR NAME=$1>/g;
+
           next PASS;
         } else {
           # zuh!?
@@ -2336,24 +2380,23 @@ sub output {
   
   my $result = '';
   my $count = 0;
+  my $odd = 0;
   foreach my $value_set (@$value_sets_array) {
     if ($loop_context_vars) {
       if ($count == 0) {
-	$value_set->{__FIRST__} = 1;
+        @{$value_set}{qw(__first__ __inner__ __last__)} = (1,0,$#{$value_sets_array} == 0);
       } elsif ($count == $#{$value_sets_array}) {
-	$value_set->{__LAST__} = 1;
+        @{$value_set}{qw(__first__ __inner__ __last__)} = (0,0,1);
       } else {
-	$value_set->{__INNER__} = 1;
+        @{$value_set}{qw(__first__ __inner__ __last__)} = (0,1,0);
       }
+      $odd = $value_set->{__odd__} = not $odd;
     }
     $template->param($value_set);    
     $result .= $template->output;
     $template->clear_params;
-    if ($loop_context_vars) {
-      delete $value_set->{__FIRST__};
-      delete $value_set->{__LAST__};
-      delete $value_set->{__INNER__};
-    }
+    @{$value_set}{qw(__first__ __last__ __inner__ __odd__)} = (0,0,0,0)
+      if ($loop_context_vars);
     $count++;
   }
 
@@ -2528,6 +2571,12 @@ capture STDOUT from the scripts, but this one is simple enough to
 include in the FAQ.  Another improvement would be to use query() to
 enable program execution inside loops.
 
+9) Can I get a copy of these docs in Japanese?
+
+Yes you can.  See Kawai Takanori's translation at:
+
+   http://member.nifty.ne.jp/hippo2000/perltips/html/template.htm
+
 
 =head1 BUGS
 
@@ -2536,7 +2585,7 @@ tell us about it (htmltmpl@lists.vm.com).  You can join the
 HTML::Template mailing-list by sending a blank email to
 htmltmpl-subscribe@lists.vm.com.  Of course, you can still email me
 directly (sam@tregar.com) with bugs, but I reserve the right to
-forward said bug reports to the mailing list.
+forward bug reports to the mailing list.
 
 When submitting bug reports, be sure to include full details,
 including the VERSION of the module, a test script and a test template
@@ -2579,6 +2628,13 @@ provided by:
    Chris Houser <chouser@bluweb.com>
    Larry Moore
    Todd Larason
+   Jody Biggs
+   T.J. Mather
+   Martin Schroth
+   Dave Wolfe
+   uchum
+   Kawai Takanori
+   Peter Guelich
 
 Thanks!
 

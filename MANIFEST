@@ -24,6 +24,10 @@ templates/urlescape.tmpl
 templates/query-test.tmpl
 templates/query-test2.tmpl
 templates/globals.tmpl
+templates/vanguard1.tmpl
+templates/vanguard2.tmpl
+templates/loop-context.tmpl
+templates/searchpath/included.tmpl
 scripts/time_trial.pl
 scripts/clean_shm.pl
 README
