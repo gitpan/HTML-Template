@@ -1,11 +1,10 @@
 package HTML::Template;
 
 use strict;
-use integer;
 use vars qw( $VERSION %CACHE );
-$VERSION = 0.91;
+$VERSION = 0.95;
 
-%CACHE = ();
+use integer; # no floating point math so far!
 
 =head1 NAME
 
@@ -181,6 +180,11 @@ name=>value pairs for a single pass over the loop template.  It is
 probably in your best interest to build these up programatically, but
 that is up to you!
 
+Inside a <TMPL_LOOP>, the only variables that are usable are the ones
+from the <TMPL_LOOP>.  The variables in the outer blocks are not
+visible within a template loop.  For the computer-science geeks among
+you, a <TMPL_LOOP> introduces a new scope much like a subroutine call.
+
 =head2 <TMPL_INCLUDE NAME="filename.tmpl">
 
 This tag includes a template directly into the current template at the
@@ -259,7 +263,6 @@ use:
   my $t = HTML::Template->new( scalarref => $ref_to_template_text, 
                                option => 'value' 
                              );
-
 
 and
 
@@ -415,6 +418,17 @@ sub new {
   # blind_cache = 1 implies cache = 1
   $options->{blind_cache} and $options->{cache} = 1;
 
+  # handle the "type", "source" parameter format (does anyone use it?)
+  if (exists($options->{type})) {
+    exists($options->{source}) or die "HTML::Template->new() called with 'type' parameter set, but no 'source'!";
+    ($options->{type} eq 'filename' or $options->{type} eq 'scalarref' or
+     $options->{type} eq 'arrayref') or
+       die "HTML::Template->new() : type parameter must be set to 'filename', 'arrayref' or 'scalarref'!";
+    $options->{$options->{type}} = $options->{source};
+    delete $options->{type};
+    delete $options->{source};
+  }
+
   # associate should be an array of one element if it's not
   # already an array.
   if (ref($options->{associate}) ne 'ARRAY') {
@@ -427,14 +441,6 @@ sub new {
       die "HTML::Template->new called with associate option, containing object of type " . ref($object) . " which lacks a param() method!";
   } 
 
-
-  # handle the "type", "source" parameter format (does anyone use it?)
-  if (exists($options->{type})) {
-    exists($options->{source}) or die "HTML::Template->new() called with 'type' parameter set, but no 'source'!";
-    $options->{$options->{type}} = $options->{source};
-    delete $options->{type};
-    delete $options->{source};
-  }
 
   # check for syntax errors:
   my $source_count = 0;
@@ -478,6 +484,8 @@ sub _new_from_loop {
 
   $self->{param_map} = $options->{param_map};
   $self->{parse_stack} = $options->{parse_stack};
+  delete($options->{param_map});
+  delete($options->{parse_stack});
 
   return $self;
 }
@@ -553,7 +561,7 @@ sub _init {
     }
 
     # else, use the cached values instead of calling _init_template
-    # and _pre_parse.
+    # and _parse.
     
     $options->{cache_debug} and warn "CACHE HIT : $options->{filename}";
     
@@ -566,13 +574,14 @@ sub _init {
     $self->clear_params();
 
     return $self;
-  }
+
+  } 
 
   # init the template and parse data
   $self->_init_template;
-  $self->_pre_parse;
+  $self->_parse;
 
-  # if we're caching, cache the results of _init_template and _pre_parse
+  # if we're caching, cache the results of _init_template and _parse
   # for future use
   if ($options->{cache} and exists($options->{filename})) {
     $options->{cache_debug} and warn "CACHE LOAD : $options->{filename}";
@@ -618,8 +627,8 @@ sub _init_template {
 
     delete($options->{scalarref});
   } elsif (exists($options->{arrayref})) {
-    # if we have an array ref, just copy it
-    $self->{template} = $self->{arrayref};
+    # if we have an array ref, copy in the contents (thanks David!)
+    $self->{template} = [ @{$options->{arrayref}} ];
 
     delete($options->{arrayref});
   } else {
@@ -634,7 +643,7 @@ sub _init_template {
       *line = \$self->{template}[$line_number];
       defined($line) or next;
 
-      if ($line =~ /<[tT][mM][pP][lL]_[Ii][Nn][Cc][Ll][Uu][Dd][Ee]\s+(?:[nN][aA][mM][eE]\s*=)?\s*"?([\w\/\.]+)"?\s*>/x) {
+      if ($line =~ /^<[tT][mM][pP][lL]_[Ii][Nn][Cc][Ll][Uu][Dd][Ee]\s+(?:[nN][aA][mM][eE]\s*=)?\s*"?([\w\/\.]+)"?\s*>$/x) {
         my $filename = $1;
 
         # open the file
@@ -657,17 +666,8 @@ sub _init_template {
         }
 
         # move the existing template lines up to their new locations,
-        # and move the new lines into place.  Using splice like this
-        # favors speed over memory, like much of the module.  If we
-        # ever need to save memory, this would be a prime candidate.
-        my $lines_in_existing_template = scalar(@{$self->{template}});
-        my $lines_in_included_file = scalar(@templateArray);
-        $#{$self->{template}} += $lines_in_included_file;
-
-        my @lines = splice(@{$self->{template}}, ($line_number + 1), ($lines_in_existing_template - $line_number + 1));
-        splice(@{$self->{template}}, ($line_number + 1), (scalar(@templateArray) + scalar(@lines) + 1), (@templateArray, @lines));
-
-        undef $self->{template}[$line_number];
+        # and move the new lines into place.  
+        splice(@{$self->{template}}, $line_number, 1, @templateArray);
       }
     }
   }
@@ -675,33 +675,45 @@ sub _init_template {
   return $self;
 }
 
-# _pre_parse sifts through a template building up the param_map and
-# parse_stack structures
+# _parse sifts through a template building up the param_map and
+# parse_stack structures.
 #
 # The end result is a Template object that is fully ready for
 # output().
-sub _pre_parse {
+sub _parse {
   my $self = shift;
   my $options = $self->{options};
   
   $options->{debug} and print "\nIn pre_parse:\n\n";
   
   # setup the stacks and maps - they're accessed by typeglobs that
-  # reference the end of the stack.
+  # reference the end of the stack.  They are masked so that a loop
+  # can transparently have its own versions.
   use vars qw(@pstack %pmap @ifstack);
   local(*pstack, *ifstack, *pmap);
   
+  # the pstack is the array of text, VARs, LOOPs, IFs and ELSEs that
+  # output() works on to produce output.  Looking at output() should
+  # make it clear what _parse is trying to accomplish.
   my @pstacks = ([]);
   *pstack = $pstacks[0];
   $self->{parse_stack} = $pstacks[0];
-  
+
+  # the pmap binds names to VARs, LOOPs and IFs.  It allows param() to
+  # access the right variable.  NOTE: output() does not look at the
+  # pmap at all!
   my @pmaps = ({});
   *pmap = $pmaps[0];
   $self->{param_map} = $pmaps[0];
 
+  # the ifstack is a temporary stack containing pending ifs and elses
+  # waiting for a /if.
   my @ifstacks = ([]);
   *ifstack = $ifstacks[0];
 
+  # the loopstack is another temp stack for closing loops.  unlike
+  # those above it doesn't get scoped inside loops, therefore it
+  # doesn't need the typeglob magic.
   my @loopstack = ();
 
   # loop through lines, filling up pstack
@@ -717,7 +729,7 @@ sub _pre_parse {
   PASS: while(1) {
       last PASS unless defined($line);
       
-      # [tT]... is twice as fast as the 'i' regex option!
+      # a general regex to match any and all TMPL_* tags
       if ($line =~ /
                     (.*?)
                     (
@@ -747,11 +759,11 @@ sub _pre_parse {
                     \s*
                     >
                     (.*)
-                   /gx) {
-        my $pre = $1;
-        my $which = $2;
-        my $name = lc $3;
-        my $post = $4;
+                   /sgx) {
+        my $pre = $1; # what comes before
+        my $which = $2; # which tag is it
+        my $name = lc $3; # what name for the tag?  undef for a /tag
+        my $post = $4; # what comes after on the line
 
         if ($which =~ /^<[tT][mM][pP][lL]_[Vv][Aa][Rr]/) {
           $options->{debug} and print "$line_number : saw $name : \"$line\"\n";
@@ -761,17 +773,21 @@ sub _pre_parse {
           my $var;        
           if (exists $pmap{$name}) {
             $var = $pmap{$name};
+            (ref($var) eq 'HTML::Template::VAR') or
+              die "HTML::Template->new() : Already used param name $name as a TMPL_LOOP, found in a TMPL_VAR at line $line_number!";
           } else {
             $var = HTML::Template::VAR->new();
             $pmap{$name} = $var;
           }
 
-          # push results
+          # push text coming before the tag onto the pstack,
+          # concatenating with preceding text if possible.
           if (ref($pstack[$#pstack]) eq 'SCALAR') {
             ${$pstack[$#pstack]} .= $pre;
           } else {
             push(@pstack, \$pre);
           }
+
           push(@pstack, $var);
 
           # keep working on line
@@ -787,6 +803,9 @@ sub _pre_parse {
           my $loop;
           if (exists $pmap{$name}) {
             $loop = $pmap{$name};
+            (ref($loop) eq 'HTML::Template::LOOP') or
+              die "HTML::Template->new() : Already used param name $name as a TMPL_VAR or TMPL_IF, found in a TMP_LOOP at line $line_number!";
+
           } else {
             # store the results in a LOOP object - actually just a
             # thin wrapper around another HTML::Template object.
@@ -794,18 +813,20 @@ sub _pre_parse {
             $pmap{$name} = $loop;
           }
 
-          # get it on the loopstack
+          # get it on the loopstack, pstack of the enclosing block
           push(@pstack, $loop);
           push(@loopstack, $loop);
 
-          # push results into parse_stack
+          # push text coming before the tag onto the pstack,
+          # concatenating with preceding text if possible.
           if (ref($pstack[$#pstack]) eq 'SCALAR') {
             ${$pstack[$#pstack]} .= $pre;
           } else {
             push(@pstack, \$pre);
           }
 
-          # magic time - push on fresh pmap and pstack, adjust the typeglobs
+          # magic time - push on a fresh pmap and pstack, adjust the typeglobs.
+          # this gives the loop a separate namespace (i.e. pmap and pstack).
           push(@pstacks, []);
           *pstack = $pstacks[$#pstacks];
           push(@pmaps, {});
@@ -824,14 +845,16 @@ sub _pre_parse {
           die "HTML::Template->new() : found </TMPL_IF|ELSE> with no matching <TMPL_IF|ELSE> at $line_number!" unless defined $loop;
 
                                                      
-          # push text on the stack - must do before pstack manip!
+          # push text coming before the tag onto the pstack,
+          # concatenating with preceding text if possible.
           if (ref($pstack[$#pstack]) eq 'SCALAR') {
             ${$pstack[$#pstack]} .= $pre;
           } else {
             push(@pstack, \$pre);
           }
 
-          # get pmap and pstack for the loop, adjust the typeglobs
+          # get pmap and pstack for the loop, adjust the typeglobs to
+          # the enclosing block.
           my $param_map = pop(@pmaps);
           *pmap = $pmaps[$#pmaps];
           my $parse_stack = pop(@pstacks);
@@ -841,7 +864,10 @@ sub _pre_parse {
           pop(@ifstacks);
           *ifstack = $ifstacks[$#ifstack];
           
-          # instantiate the sub-Template:
+          # instantiate the sub-Template, feeding it parse_stack and
+          # param_map.  This means that only the enclosing template
+          # does _parse() - sub-templates get their parse_stack and
+          # param_map fed to them already filled in.
           $loop->[0] = HTML::Template->_new_from_loop(
                                                       parse_stack => $parse_stack,
                                                       param_map => $param_map,
@@ -861,6 +887,8 @@ sub _pre_parse {
           my $var;        
           if (exists $pmap{$name}) {
             $var = $pmap{$name};
+            (ref($var) eq 'HTML::Template::VAR') or
+              die "HTML::Template->new() : Already used param name $name as a TMPL_LOOP, found in a TMPL_IF at line $line_number!";
           } else {
             $var = HTML::Template::VAR->new();
             $pmap{$name} = $var;
@@ -869,12 +897,15 @@ sub _pre_parse {
           # connect the var to an if
           my $if = HTML::Template::IF->new($var);
 
-          # push results
+          # push text coming before the tag onto the pstack,
+          # concatenating with preceding text if possible.
           if (ref($pstack[$#pstack]) eq 'SCALAR') {
             ${$pstack[$#pstack]} .= $pre;
           } else {
             push(@pstack, \$pre);
           }
+
+          # push what we've got onto the stacks
           push(@pstack, $if);
           push(@ifstack, $if);
 
@@ -887,18 +918,20 @@ sub _pre_parse {
           my $if = pop(@ifstack);
           die "HTML::Template->new() : found </TMPL_IF|ELSE> with no matching <TMPL_IF|ELSE> at $line_number!" unless defined $if;
 
-          # push text on the stack
+          # push text coming before the tag onto the pstack,
+          # concatenating with preceding text if possible.
           if (ref($pstack[$#pstack]) eq 'SCALAR') {
             ${$pstack[$#pstack]} .= $pre;
           } else {
             push(@pstack, \$pre);
           }
 
-          # connect the matching to this "address" - place a NOOP to hold the spot.
+          # connect the matching to this "address" - place a NOOP to
+          # hold the spot.  This allows output() to treat an IF in the
+          # assembler-esque "Conditional Jump" mode.
           push(@pstack, HTML::Template::NOOP->new());
           $if->[1] = $#pstack;
           
-
           # next line
           $line = $post;
           next PASS;
@@ -911,7 +944,8 @@ sub _pre_parse {
           
           my $else = HTML::Template::ELSE->new($if->[0]);
 
-          # push stuff onto the stack
+          # push text coming before the tag onto the pstack,
+          # concatenating with preceding text if possible.
           if (ref($pstack[$#pstack]) eq 'SCALAR') {
             ${$pstack[$#pstack]} .= $pre;
           } else {
@@ -920,8 +954,12 @@ sub _pre_parse {
           push(@pstack, $else);
           push(@ifstack, $else);
 
-          # connect the matching to this "address"
-          $if->[1] = ($#pstack);
+          # connect the matching to this "address" - thus the if,
+          # failing jumps to the ELSE address.  The else then gets
+          # elaborated, and of course succedes.  On the other hand, if
+          # the IF fails and falls though, output will reach the else
+          # and jump to the /if address.
+          $if->[1] = $#pstack;
 
           $line = $post;
           next PASS;
@@ -944,6 +982,10 @@ sub _pre_parse {
       }
     }
   }
+
+  # make sure we don't have dangling IF or LOOP blocks
+  scalar(@ifstack) and die "HTML::Template->new() : At least one <TMPL_IF> not terminated at end of file!";
+  scalar(@loopstack) and die "HTML::Template->new() : At least one <TMPL_LOOP> not terminated at end of file!";
 
   # all done with template
   delete $self->{template};
@@ -995,7 +1037,7 @@ sub param {
     
     # check for parameter existence 
     $options->{die_on_bad_params} and !exists($param_map->{$param}) and
-      die("HTML::Template : Attempt to set nonexistent parameter $param");
+      die("HTML::Template : Attempt to get nonexistent parameter $param");
     
 
     return undef unless (exists($param_map->{$param}) and
@@ -1070,7 +1112,7 @@ replaced with the value assigned to "name" via param().  If a named
 parameter is unset it is simply replaced with ''.  <TMPL_LOOPS> are
 evaluated once per parameter set, accumlating output on each pass.
 
-Calling output() is garaunteed not to change the state of the
+Calling output() is guaranteed not to change the state of the
 Template object, in case you were wondering.  This property is mostly
 important for the internal implementation of loops.
 
@@ -1205,7 +1247,8 @@ package HTML::Template::NOOP;
 
 sub new {
   my $pkg = shift;
-  my $self = \$pkg;
+  my $unused;
+  my $self = \$unused;
   bless($self, $pkg);
   return $self;
 }
@@ -1214,11 +1257,53 @@ sub new {
 
 __END__
 
+=head1 FREQUENTLY ASKED QUESTIONS
+
+In the interest of greater understanding I've started a FAQ section of
+the perldocs.  Please look in here before you send me email.
+
+=head2 I want support for <TMPL_XXX>!  How about it?
+
+Maybe.  I definitely encourage people to send me their ideas for
+HTML::Template, but you should realize that I have a strong desire to
+keep HTML::Template simple.  Please be ready to explain to me how the
+new tag fits in with HTML::Template's mission to provide a fast,
+lightweight system for using HTML templates.
+
+NOTE: Offering to program said addition and provide it in the form of
+a patch to the most recent version of HTML::Template will definitely
+have a softening effect of my resolve!
+
+=head2 I found a bug, can you fix it?
+
+That depends.  Did you send me the VERSION of HTML::Template, a test
+script and a test template?  If so, then almost certainly.
+
+=head2 <TMPL_VAR>s from the main template aren't working inside a <TMPL_LOOP>!  Why?
+
+This is the intended behavior.  <TMPL_LOOP> introduces a separate
+scope for <TMPL_VAR>s much like a subroutine call in Perl introduces a
+separate scope for "my" variables.  If you need to have a variable
+from the main template work inside a loop you'll need to manually
+provide the value for each iteration of the loop.
+
+=head2 Why do you use /[Tt]/ instead of /t/i?  It's so ugly!
+
+Simple - the case-insensitive match switch is very inefficient.
+According to _Mastering_Regular_Expressions_ from O'Reilly Press,
+/[Tt]/ is faster and more space efficient than /t/i - by as much as
+double against long strings.  //i essentially does a lc() on the
+string and keeps a temporary copy in memory.
+
+When this changes, and I'm told it will, I will gladly use //i.
+Believe me, I realize [Tt] is hideously ugly.
+
 =head1 BUGS
 
 I am aware of no bugs - if you find one, email me (sam@tregar.com)
-with full details, including the VERSION of the module and a test
-script / test template demonstrating the problem.
+with full details, including the VERSION of the module, a test script
+and a test template demonstrating the problem.  Please see the
+FREQUENTLY ASKED QUESTIONS above before you mail me!
 
 =head1 CREDITS
 
@@ -1237,7 +1322,9 @@ provided by:
    Kevin Puetz
    Steve Reppucci
    Richard Dice
-   Tom Huskins
+   Tom Hukins
+   Eric Zylberstejn
+   David Glasser
 
 Thanks!
 

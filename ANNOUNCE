@@ -1,4 +1,4 @@
-ANNOUNCEMENT: NEW VERSION: HTML::Template 0.91
+ANNOUNCEMENT: NEW VERSION: HTML::Template 0.95
 
 NAME
 
@@ -6,9 +6,11 @@ HTML::Template - a Perl module to use HTML Templates
 
 CHANGES
 
-0.91
-        - bug fix: possible loss of text after a </TMPL_IF>
-                   (Spotted by Tom Huskins)
+0.95
+        - bug fix: some lines were getting chomped (Eric Zylberstejn)
+        - *NUMEROUS* bug fixes (David Glasser - Thanks a lot!)
+        - new FAQ section in documentation
+        - code cleanup and improved comments
 
 DESCRIPTION
 

@@ -57,8 +57,15 @@ Revision history for Perl extension HTML::Template.
         - near total rewrite - faster, smaller, more "compiler-esque" code.
         - *MASSIVE* speedups in all modes - up to 10x faster!1
         - bug fix : param() wasn't returning names of LOOPs
-        - This really is version 0.9 so 1.0 is coming up.  Get those bug reports in!
+        - This really is version 0.9 so 1.0 is coming up.  Get those
+          bug reports in!
 
 0.91
         - bug fix: possible loss of text after a </TMPL_IF>
           (Thanks to Tom Huskins for alerting me to this one!)
+
+0.95
+        - bug fix: some lines were getting chomped (Eric Zylberstejn)
+        - *NUMEROUS* bug fixes (David Glasser - Thanks a lot!)
+        - new FAQ section in documentation
+        - code cleanup and improved comments

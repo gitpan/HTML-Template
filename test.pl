@@ -61,7 +61,7 @@ $template->param('COUNTRY_SELECTOR', "klajslkjdsafkljds");
 $template->param('LOGO_LINK', "dsfpkjdsfkgljdsfkglj");
 $template->param('PHOTO_LINK', "lsadfjlkfjdsgkljhfgklhasgh");
 
-my $output = $template->output;
+$output = $template->output;
 if ($output =~ /<TMPL_VAR/) {
   die "not ok 3\n";
 } else {
@@ -75,7 +75,7 @@ my $template = HTML::Template->new(
                                   );
 $template->param('ADJECTIVE_LOOP', [ { ADJECTIVE => 'really' }, { ADJECTIVE => 'very' } ] );
 
-my $output =  $template->output;
+$output =  $template->output;
 if ($output =~ /ADJECTIVE_LOOP/) {
   die "not ok 4\n$output";
 } elsif ($output =~ /really.*very/s) {
@@ -90,7 +90,7 @@ $template = HTML::Template->new(
                                   );
 $template->param('ADJECTIVE_LOOP', [ { ADJECTIVE => 'really' }, { ADJECTIVE => 'very' } ] );
 
-my $output =  $template->output;
+$output =  $template->output;
 if ($output =~ /ADJECTIVE_LOOP/) {
   die "not ok 5\n\n";
 } elsif ($output =~ /really.*very/s) {
@@ -103,14 +103,14 @@ if ($output =~ /ADJECTIVE_LOOP/) {
 $template = HTML::Template->new(
                                 filename => 'templates/long_loops.tmpl',
                                   );
-my $output =  $template->output;
+$output =  $template->output;
 print "ok 6\n";
 
 # test a template with TMPL_INCLUDE
 $template = HTML::Template->new(
                                 filename => 'templates/include.tmpl',
                                );
-my $output =  $template->output;
+$output =  $template->output;
 if (!($output =~ /5/) || !($output =~ /6/)) {
   die "not ok 7\n";
 } else {
@@ -123,7 +123,7 @@ $template = HTML::Template->new(
                                 cache => 1,
                                 # cache_debug => 1
                                );
-my $output =  $template->output;
+$output =  $template->output;
 if (!($output =~ /5/) || !($output =~ /6/)) {
   die "not ok 8\n";
 } 
@@ -136,7 +136,7 @@ my $template2 = HTML::Template->new(
                                     cache => 1,
                                     # cache_debug => 1
                                    );
-my $output =  $template->output;
+$output =  $template->output;
 if (!($output =~ /5/) || !($output =~ /6/)) {
   die "not ok 8\n";
 } else {
@@ -154,7 +154,7 @@ my $template_two = HTML::Template->new (
                                         associate => $template_one
                                        );
 
-my $output =  $template_two->output;
+$output =  $template_two->output;
 if ($output =~ /ADJECTIVE/) {
   die "not ok 9\n";
 } elsif ($output =~ /very/) {
@@ -170,7 +170,7 @@ my $template_l = HTML::Template->new(
                                   );
 # $template_l->param('ADJECTIVE_LOOP', [ { ADJECTIVE => 'really' }, { ADJECTIVE => 'very' } ] );
 
-my $output =  $template_l->output;
+$output =  $template_l->output;
 if ($output =~ /INSIDE/) {
   die "not ok 10\n";
 } else {
@@ -185,7 +185,7 @@ my $template_i = HTML::Template->new(
                                   );
 # $template_l->param('ADJECTIVE_LOOP', [ { ADJECTIVE => 'really' }, { ADJECTIVE => 'very' } ] );
 
-my $output =  $template_i->output;
+$output =  $template_i->output;
 if ($output =~ /INSIDE/) {
   die "not ok 11\n";
 } else {
@@ -199,7 +199,7 @@ my $template_i2 = HTML::Template->new(
                                   );
 $template_i2->param(BOOL => 1);
 
-my $output =  $template_i2->output;
+$output =  $template_i2->output;
 if ($output !~ /INSIDE/) {
   die "not ok 12\n";
 } else {
@@ -213,7 +213,7 @@ my $template_ie = HTML::Template->new(
                                      # debug => 1
                                   );
 
-my $output =  $template_ie->output;
+$output =  $template_ie->output;
 if ($output !~ /INSIDE ELSE/) {
   die "not ok 13\n";
 } elsif ($output =~ /INSIDE IF/) {
@@ -229,11 +229,46 @@ my $template_ie2 = HTML::Template->new(
                                   );
 $template_ie2->param(BOOL => 1);
 
-my $output =  $template_ie2->output;
+$output =  $template_ie2->output;
 if ($output !~ /INSIDE IF/) {
   die "not ok 14\n";
 } elsif ($output =~ /INSIDE ELSE/) {
   die "not ok 14\n";
 } else {
   print "ok 14\n";
+}
+
+# try something a bit larger
+$template = HTML::Template->new(
+                                filename => 'templates/medium.tmpl',
+                                shared_ipc_cache => 1
+                               );
+$template->param('ALERT', 'I am alert.');
+$template->param('COMPANY_NAME', "MY NAME IS");
+$template->param('COMPANY_ID', "10001");
+$template->param('OFFICE_ID', "10103214");
+$template->param('NAME', 'SAM I AM');
+$template->param('ADDRESS', '101011 North Something Something');
+$template->param('CITY', 'NEW York');
+$template->param('STATE', 'NEw York');
+$template->param('ZIP','10014');
+$template->param('PHONE','212-929-4315');
+$template->param('PHONE2','');
+$template->param('SUBCATEGORIES','kfldjaldsf');
+$template->param('DESCRIPTION',"dsa;kljkldasfjkldsajflkjdsfklfjdsgkfld\nalskdjklajsdlkajfdlkjsfd\n\talksjdklajsfdkljdsf\ndsa;klfjdskfj");
+$template->param('WEBSITE','http://www.assforyou.com/');
+$template->param('INTRANET_URL','http://www.something.com');
+$template->param('REMOVE_BUTTON', "<INPUT TYPE=SUBMIT NAME=command VALUE=\"Remove Office\">");
+$template->param('COMPANY_ADMIN_AREA', "<A HREF=administrator.cgi?office_id=${office_id}&command=manage>Manage Office Administrators</A>");
+$template->param('CASESTUDIES_LIST', "adsfkljdskldszfgfdfdsgdsfgfdshghdmfldkgjfhdskjfhdskjhfkhdsakgagsfjhbvdsaj hsgbf jhfg sajfjdsag ffasfj hfkjhsdkjhdsakjfhkj kjhdsfkjhdskfjhdskjfkjsda kjjsafdkjhds kjds fkj skjh fdskjhfkj kj kjhf kjh sfkjhadsfkj hadskjfhkjhs ajhdsfkj akj fkj kj kj  kkjdsfhk skjhadskfj haskjh fkjsahfkjhsfk ksjfhdkjh sfkjhdskjfhakj shiou weryheuwnjcinuc 3289u4234k 5 i 43iundsinfinafiunai saiufhiudsaf afiuhahfwefna uwhf u auiu uh weiuhfiuh iau huwehiucnaiuncianweciuninc iuaciun iucniunciunweiucniuwnciwe");
+$template->param('NUMBER_OF_CONTACTS', "aksfjdkldsajfkljds");
+$template->param('COUNTRY_SELECTOR', "klajslkjdsafkljds");
+$template->param('LOGO_LINK', "dsfpkjdsfkgljdsfkglj");
+$template->param('PHOTO_LINK', "lsadfjlkfjdsgkljhfgklhasgh");
+
+$output = $template->output;
+if ($output =~ /<TMPL_VAR/) {
+  die "not ok 15\n";
+} else {
+  print "ok 15\n";
 }
