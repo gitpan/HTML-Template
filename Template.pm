@@ -1,6 +1,6 @@
 package HTML::Template;
 
-$HTML::Template::VERSION = '1.4';
+$HTML::Template::VERSION = '1.5';
 
 =head1 NAME
 
@@ -466,33 +466,30 @@ mod_perl.  Cache defaults to 0.
 
 =item *
 
-shared_cache - *EXPERIMENTAL* - if set to 1 the module will store its
-cache in shared memory using the IPC::ShareLite and Storable modules
-(available from CPAN).  The effect of this will be to maintain a
-single shared copy of each parsed template for all instances of
-HTML::Template to use.  This can be a significant reduction in memory
-usage in a multiple server environment.  As an example, on one of our
-systems we use 4MB of template cache and maintain 25 httpd processes -
-shared_cache results in saving almost 100MB!  Of course, some
-reduction in speed versus normal caching is to be expected.  Another
-difference between normal caching and shared_cache is that
-shared_cache will work in a CGI environment - normal caching is only
-useful in a persistent environment like Apache/mod_perl.
+shared_cache - if set to 1 the module will store its cache in shared
+memory using the IPC::SharedCache module (available from CPAN).  The
+effect of this will be to maintain a single shared copy of each parsed
+template for all instances of HTML::Template to use.  This can be a
+significant reduction in memory usage in a multiple server
+environment.  As an example, on one of our systems we use 4MB of
+template cache and maintain 25 httpd processes - shared_cache results
+in saving almost 100MB!  Of course, some reduction in speed versus
+normal caching is to be expected.  Another difference between normal
+caching and shared_cache is that shared_cache will work in a CGI
+environment - normal caching is only useful in a persistent
+environment like Apache/mod_perl.
 
 By default HTML::Template uses the IPC key 'TMPL' as a shared root
 segment (0x4c504d54 in hex), but this can be changed by setting the
-'ipc_key' new() parameter to another 4-character or integer key.  
+'ipc_key' new() parameter to another 4-character or integer key.
+Other options can be used to affect the shared memory cache correspond
+to IPC::SharedCache options - ipc_mode, ipc_segment_size and
+ipc_max_size.  See L<IPC::SharedCache> for a description of how these
+work - in most cases you shouldn't need to change them from the
+defaults.
 
-On most unix systems you can examine the shared memory segments using
-'ipcs' and delete them with 'ipcrm'.  This can be necessary if for
-some reason the HTML::Template cache becomes corrupt.  I've included a
-small script in scripts/ called clean_shm.pl.  On my system this
-script deletes all shared memory segments accessible by the running
-user - sort of a "rm -rf /" for shared memory.  
-
-This option is currently *EXPERIMENTAL* - give it a try and tell me
-how it works out for you.  I'm particularily interested in reports of
-how it works under heavy-load and on non-Linux systems.
+For more information about the shared memory cache system used by
+HTML::Template see L<IPC::SharedCache>.
 
 =item *
 
@@ -533,6 +530,10 @@ the order they appear:
 
 The old associateCGI() call is still supported, but should be
 considered obsolete.
+
+NOTE: The parameter names are matched in a case-insensitve manner.  If
+you have two parameters in a CGI object like 'NAME' and 'Name' one
+will be chosen randomly by associate.
 
 =item *
 
@@ -612,13 +613,18 @@ to STDERR.  Defaults to 0.
 
 =item *
 
-debug_stack - if set to 1 the module will use Data::Dumper to print
+stack_debug - if set to 1 the module will use Data::Dumper to print
 out the contents of the parse_stack to STDERR.  Defaults to 0.
 
 =item *
 
 cache_debug - if set to 1 the module will send information on cache
 loads, hits and misses to STDERR.  Defaults to 0.
+
+=item *
+
+memory_debug - if set to 1 the module will send information on cache
+memory usage to STDERR.  Requires the GTop module.  Defaults to 0.
 
 =back 4
 
@@ -664,11 +670,12 @@ sub new {
   # set default parameters in options hash
   %$options = (
                debug => 0,
-               debug_stack => 0,
+               stack_debug => 0,
                timing => 0,
                cache => 0,
                blind_cache => 0,
                cache_debug => 0,
+               memory_debug => 0,
                die_on_bad_params => 1,
                vanguard_compatibility_mode => 0,
                associate => [],
@@ -678,6 +685,9 @@ sub new {
                max_includes => 10,
                shared_cache => 0,
                ipc_key => 'TMPL',
+               ipc_mode => 0666,
+               ipc_segment_size => 65536,
+               ipc_max_size => 0,
               );
   
   # load in options supplied to new()
@@ -734,39 +744,51 @@ sub new {
     die "HTML::Template->new called with multiple (or no) template sources specified!  A valid call to new() has exactly one filename => 'file' OR exactly one scalarRef => \\\$scalar OR exactly one arrayRef => \\\@array";    
   }
 
+  # do some memory debugging - this is best started as early as possible
+  if ($options->{memory_debug}) {
+    # memory_debug needs GTop
+    eval { require 'GTop.pm'; };
+    die "Could not load GTop.  You must have GTop installed to use HTML::Template in memory_debug mode.  The error was: $@"
+      if ($@);
+    $self->{gtop} = GTop->new();
+    $self->{proc_mem} = $self->{gtop}->proc_mem($$);
+    print STDERR "\n### HTML::Template Memory Debug ### START ", $self->{proc_mem}->size(), "\n";
+  }
+
   if ($options->{shared_cache}) {
     # shared_cache needs some extra modules loaded
-    eval {
-      require 'Storable.pm';
-    };
-    die "Could not load Storable.  You must have Storable installed to use HTML::Template in shared_cache mode.  The error was: $@"
+    eval { require 'IPC/SharedCache.pm'; };
+    die "Could not load IPC::SharedCache.  You must have IPC::SharedCache installed to use HTML::Template in shared_cache mode.  The error was: $@"
       if ($@);
-    
-    eval {
-      require 'IPC/ShareLite.pm';
-    };
-    die "Could not load IPC::ShareLite.  You must have IPC::ShareLite installed to use HTML::Template in shared_cache mode.  The error was: $@"
-      if ($@);
-    
-    # dynamically patch IPC::ShareLite version 0.05.  Later versions
-    # will include a patch necessary to avoid a segfault on the first
-    # cache load.  This is some pretty rude behavior but this patch
-    # has been accepted by Maurice Aubrey for the next version of
-    # IPC::ShareLite (0.06?).  I'll remove this and directly check for
-    # the new version when it is released.
-    if ($IPC::ShareLite::VERSION == 0.05) {
-      *IPC::ShareLite::DESTROY = sub {
-        my $self = shift;
-        
-        destroy_share( $self->{share}, $self->{destroy} )
-          unless ($self->{share} == 0);
-      }
-    }
+
+    # initialize the shared cache
+    my %cache;
+    tie %cache, 'IPC::SharedCache',
+      ipc_key => $options->{ipc_key},
+      load_callback => [\&_load_shared_cache, $self],
+      validate_callback => [\&_validate_shared_cache, $self],
+      debug => 0,
+      ipc_mode => $options->{ipc_mode},
+      max_size => $options->{ipc_max_size},
+      ipc_segment_size => $options->{ipc_segment_size};
+    $self->{cache} = \%cache;
   }
   
+  print STDERR "### HTML::Template Memory Debug ### POST CACHE INIT ", $self->{proc_mem}->size(), "\n"
+    if $options->{memory_debug};
+
   # initialize data structures
   $self->_init;
   
+  print STDERR "### HTML::Template Memory Debug ### POST _INIT CALL ", $self->{proc_mem}->size(), "\n"
+    if $options->{memory_debug};
+  
+  # drop the shared cache - leaving out this step results in the
+  # template object evading garbage collection since the callbacks in
+  # the shared cache tie hold references to $self!  This was not easy
+  # to find, by the way.
+  delete $self->{cache} if $options->{shared_cache};
+
   return $self;
 }
 
@@ -784,7 +806,7 @@ sub _new_from_loop {
   # many options have no relevance.
   %$options = (
                debug => 0,
-               debug_stack => 0,
+               stack_debug => 0,
                die_on_bad_params => 1,
                associate => [],
                loop_context_vars => 0,
@@ -821,15 +843,16 @@ sub _init {
   my $self = shift;
   my $options = $self->{options};
 
-  # try the cache
-  if ($options->{cache}) { 
-    if (!$options->{shared_cache}) {
-      $self->_fetch_from_cache();
-    } else {
-      $self->_fetch_from_shared_cache();
-    }
-    return if (defined $self->{param_map} and defined $self->{parse_stack});
+  if ($options->{cache} and $options->{shared_cache}) {
+    # try the shared cache
+    $self->_fetch_from_shared_cache();
+  } elsif ($options->{cache}) {
+    # try the normal cache
+    $self->_fetch_from_cache();
   }
+  
+  # if we got a cache hit, return
+  return if (defined $self->{param_map} and defined $self->{parse_stack});
 
   # if we're here, then we didn't get a cached copy, so do a full
   # init.
@@ -837,14 +860,9 @@ sub _init {
   $self->_parse();
 
   # now that we have a full init, cache the structures if cacheing is
-  # on.
-  if ($options->{cache}) { 
-    if (!$options->{shared_cache}) {
-      $self->_commit_to_cache();
-    } else {
-      $self->_commit_to_shared_cache();
-    }
-  }
+  # on.  shared cache is already cool.
+  $self->_commit_to_cache() if ($options->{cache} 
+                                and not $options->{shared_cache});
 }
 
 # Caching subroutines - they handle getting and validating cache
@@ -918,182 +936,81 @@ sub _commit_to_cache {
 }
 
 # Shared cache routines.
-use vars qw( $ROOT_SHARE %SHARE_CACHE );
 sub _fetch_from_shared_cache {
   my $self = shift;
   my $options = $self->{options};
-  my $filename = $options->{filename};
 
-  return unless (exists $options->{filename});
+  return unless (exists($options->{filename}));
 
-  # get template cache share object
-  my $share = $SHARE_CACHE{$filename};
-  if (not defined $share) {
-    # do ROOT_CACHE initialization if needed
-    if (not defined $ROOT_SHARE) {
-      $ROOT_SHARE = IPC::ShareLite->new('-key' => $options->{ipc_key},
-                                        '-create' => 0, '-destroy' => 0);
-      if (not defined $ROOT_SHARE) {
-        # try to create it if that didn't work
-        $ROOT_SHARE = IPC::ShareLite->new('-key' => $options->{ipc_key},
-                                          '-create' => 1,'-exclusive' => 1,
-                                          '-destroy' => 0);
-        defined($ROOT_SHARE) or die "HTML::Template->new : Unable to initialize root IPC shared memory block (shared_cache => 1) : $!";
-        $ROOT_SHARE->store(Storable::freeze({}));
-        $options->{cache_debug} and 
-          print STDERR "### HTML::Template Cache Debug ### SHARED CACHE ROOT INIT\n";
-      }
-    }
+  # fetch from the shared cache.
+  $self->{record} = $self->{cache}{$options->{filename}};
 
-    # get root cache map inside a shared lock
-    $ROOT_SHARE->lock(IPC::ShareLite::LOCK_SH());
-    my $root_block = $ROOT_SHARE->fetch();
-    $ROOT_SHARE->unlock();
-    die "HTML::Template->new : Unable to get IPC root cache (shared_cache => 1) : $!"
-      unless defined($root_block);
+  ($self->{mtime}, 
+   $self->{included_mtimes}, 
+   $self->{param_map}, 
+   $self->{parse_stack}) = @{$self->{record}}
+     if defined($self->{record});
+  
+  $options->{cache_debug} and defined($self->{record}) and print STDERR "### HTML::Template Cache Debug ### CACHE HIT : $options->{filename}\n";
+  # clear out values from param_map from last run
+  $self->_normalize_options(), $self->clear_params()
+    if (defined($self->{record}));
+  delete($self->{record});
 
-    # see if we've got an entry for this template file, return if not
-    my $root_cache = Storable::thaw($root_block);   
-    my $key = $root_cache->{$filename};
-    return unless (defined $key);
+  return $self;
+}
 
-    # we've got a key, get the share and cache it
-    $share = IPC::ShareLite->new('-key'=>$key,'-create'=>0,'-destroy'=>0);
-    die "HTML::Template->new : Unable to get shared cache block $key : $!"
-      unless defined($share);
-    $SHARE_CACHE{$filename} = $share;
-  }
+sub _validate_shared_cache {
+  my ($self, $filename, $record) = @_;
+  my $options = $self->{options};
 
-  # get the template cache
-  my $template_cache_block = $share->fetch();
-  die "HTML::Template->new : Unable to get IPC template cache (shared_cache => 1) : $!"
-    unless defined($template_cache_block);
+  return 1 if $options->{blind_cache};
 
-  # pull out template data
-  my $template_cache = Storable::thaw($template_cache_block);
-  my ($c_mtime, $included_mtimes, $param_map, $parse_stack) 
-    = @$template_cache;
+  my ($c_mtime, $included_mtimes, $param_map, $parse_stack) = @$record;
 
-  # if the modification time has changed return
+  # if the modification time has changed return false
   my $mtime = $self->_mtime();
   if (defined $mtime and defined $c_mtime
       and $mtime != $c_mtime) {
     $options->{cache_debug} and 
       print STDERR "### HTML::Template Cache Debug ### SHARED CACHE MISS : $filename : $mtime\n";
-    return;
+    return 0;
   }
 
   # if the template has includes, check each included file's mtime
-  # and return if different
+  # and return false if different
   if (defined $mtime and defined $included_mtimes) {
     foreach my $fname (keys %$included_mtimes) {
       next unless defined($included_mtimes->{$fname});
       if ($included_mtimes->{$fname} != (stat($fname))[9]) {
         $options->{cache_debug} and 
           print STDERR "### HTML::Template Cache Debug ### SHARED CACHE MISS : $filename : INCLUDE $fname\n";
-        return;
+        return 0;
       }
     }
   }
 
-  # all done - got the cache template.
-  $options->{cache_debug} and 
-    print STDERR "### HTML::Template Cache Debug ### SHARED CACHE HIT : $filename\n";
-  
-  $self->{param_map} = $param_map;
-  $self->{parse_stack} = $parse_stack;
-  $self->{included_mtimes} = $included_mtimes;
-  $self->_normalize_options();
-  return;
+  # all done - return true
+  return 1;
 }
 
-use vars qw( $LAST_KEY );
-sub _commit_to_shared_cache {
-  my $self = shift;
+sub _load_shared_cache {
+  my ($self, $filename) = @_;
   my $options = $self->{options};
-  my $filename = $options->{filename};
-  
+  my $cache = $self->{cache};
+
   $options->{cache_debug} and print STDERR "### HTML::Template Cache Debug ### SHARED CACHE LOAD : $options->{filename}\n";
 
-  # check for an impossibility, just to make me feel better.  This is
-  # done in _fetch_from_shared_cache...
-  defined($ROOT_SHARE) or die "HTML::Template->new : Uninitialized root IPC shared memory block in commit (shared_cache => 1) : $!";
+  $self->_init_template();
+  $self->_parse();
 
-  # one way or another, this is going into the template cache 
-  my $cache_block = Storable::freeze([$self->{mtime},
-                                      $self->{included_mtimes},
-                                      $self->{param_map}, 
-                                      $self->{parse_stack}]);    
+  print STDERR "### HTML::Template Memory Debug ### END CACHE LOAD ", $self->{proc_mem}->size(), "\n"
+    if $options->{memory_debug};
 
-  # try to get template cache share object from the cache
-  if (exists $SHARE_CACHE{$filename}) {
-    # store the share to the existing cache block.  This may overwrite
-    # an already-written up-to-date cache, but to find out we'd have
-    # to incure the penalty of fetching AND thawing inside an exlusive
-    # lock!     
-    $SHARE_CACHE{$filename}->store($cache_block);
-    return;
-  }
-
-  # we don't have a key for the cache - we'll now try to get one and
-  # failing that allocate a new block.  This is all done within a big
-  # exclusive lock on the root.  It's possible a more permisve locking
-  # strategy could be developed, but this one is at least correct.  I
-  # haven't been able to come up with a better one that didn't leave
-  # some possibility of shared-memory blocks leaking in a root
-  # overwrite.
-  $ROOT_SHARE->lock();
-
-  my $root_block = $ROOT_SHARE->fetch();
-  $ROOT_SHARE->unlock(), die "HTML::Template->new : Unable to get IPC root cache (shared_cache => 1) : $!"
-    unless defined($root_block);
-
-  # see if we've got an entry for this template file, if we do, use it.
-  my $root_record = Storable::thaw($root_block);   
-  my $key = $root_record->{$filename};
-  if (defined $key) {
-    # we've got a key, get the share and cache it (we could unlock the
-    # ROOT_CACHE now, but any lockers waiting for this share key would
-    # then get the old share and recommit - holding it a bit longer
-    # gains assurance this won't be the case)
-    my $share = IPC::ShareLite->new('-key'=>$key,'-create'=>0,'-destroy'=>0);
-    die "HTML::Template->new : Unable to get shared cache block $key (shared_cache => 1) : $!"
-      unless defined($share);
-    $SHARE_CACHE{$filename} = $share;
-    $share->store($cache_block);
-    $ROOT_SHARE->unlock();
-    return;
-  }
-
-  # we need to get a new shared block and update the root cache.
-  # first, allocate the new shared block
-
-  # try up to 500 consecutive keys.  Why 500?  Why not?  This should
-  # probably by configurable if I could think of a name that wasn't
-  # ten words long like how_many_ipc_keys_to_check_for_empty_blocks.
-  $key = $LAST_KEY || 1;
-  my $to = $key + 500; 
-
-  my $share;
-  for (;$key < $to;$key++) {
-    $share = IPC::ShareLite->new('-key' => $key,
-                                 '-create' => 1,
-                                 '-exclusive' => 1,
-                                 '-destroy' => 0,
-                                );
-    last if defined($share);
-  }
-  $ROOT_SHARE->unlock(), die "HTML::Template->new : Unable to get shared cache block (shared_cache => 1) : $!"
-    unless defined($share);
-
-  $options->{cache_debug} and print STDERR "### HTML::Template Cache Debug ### : SHARED CACHE ALLOC : $filename : $key\n";
-  $share->store($cache_block);
-  $root_record->{$filename} = $key;
-  $ROOT_SHARE->store(Storable::freeze($root_record));
-  $ROOT_SHARE->unlock();
-
-  $LAST_KEY = $key;
-  return;
+  return [ $self->{mtime},
+           $self->{included_mtimes}, 
+           $self->{param_map}, 
+           $self->{parse_stack} ]; 
 }
 
 # utility function - computes the mtime for $options->{filename}
@@ -1124,7 +1041,7 @@ sub _normalize_options {
       foreach my $template (values %{$item->[HTML::Template::LOOP::TEMPLATE_HASH]}) {
         # must be the same list as the call to _new_from_loop...
         $template->{options}{debug} = $options->{debug};
-        $template->{options}{debug_stack} = $options->{debug_stack};
+        $template->{options}{stack_debug} = $options->{stack_debug};
         $template->{options}{die_on_bad_params} = $options->{die_on_bad_params};
         push(@pstacks, $template->{parse_stack});
       }
@@ -1136,6 +1053,9 @@ sub _normalize_options {
 sub _init_template {
   my $self = shift;
   my $options = $self->{options};
+
+  print STDERR "### HTML::Template Memory Debug ### START INIT_TEMPLATE ", $self->{proc_mem}->size(), "\n"
+    if $options->{memory_debug};
 
   if (exists($options->{filename})) {    
     my $filename = $options->{filename};
@@ -1202,6 +1122,9 @@ sub _init_template {
   } else {
     die("HTML::Template : Need to call new with filename, scalarref or arrayref parameter specified.");
   }
+
+  print STDERR "### HTML::Template Memory Debug ### END INIT_TEMPLATE ", $self->{proc_mem}->size(), "\n"
+    if $options->{memory_debug};
 
   return $self;
 }
@@ -1800,7 +1723,7 @@ sub _parse {
               
 
   # want a stack dump?
-  if ($options->{debug_stack}) {
+  if ($options->{stack_debug}) {
     require 'Data/Dumper.pm';
     print STDERR "### HTML::Template _param Stack Dump ###\n\n", Data::Dumper::Dumper($self->{parse_stack}), "\n";
   }
@@ -1813,21 +1736,23 @@ sub _parse {
 
 param() can be called in a number of ways
 
-
 1) To return a list of parameters in the template : 
 
    my @parameter_names = $self->param();
    
 
 2) To return the value set to a param : 
- 
+
    my $value = $self->param('PARAM');
 
-   
 3) To set the value of a parameter :
 
       # For simple TMPL_VARs:
       $self->param(PARAM => 'value');
+
+      # with a subroutine reference that gets called to get the value of
+      # the scalar.
+      $self->param(PARAM => sub { return 'value' });   
 
       # And TMPL_LOOPs:
       $self->param(LOOP_PARAM => 
@@ -2006,10 +1931,13 @@ sub output {
   my $self = shift;
   my $options = $self->{options};
 
+  print STDERR "### HTML::Template Memory Debug ### START OUTPUT ", $self->{proc_mem}->size(), "\n"
+    if $options->{memory_debug};
+
   $options->{debug} and print STDERR "### HTML::Template Debug ### In output\n";
 
   # want a stack dump?
-  if ($options->{debug_stack}) {
+  if ($options->{stack_debug}) {
     require 'Data/Dumper.pm';
     print STDERR "### HTML::Template output Stack Dump ###\n\n", Data::Dumper::Dumper($self->{parse_stack}), "\n";
   }
@@ -2017,14 +1945,21 @@ sub output {
   # support the associate magic, searching for undefined params and
   # attempting to fill them from the associated objects.
   if (scalar(@{$options->{associate}})) {
+    # prepare case-mapping hashes to do case-insensitive matching
+    # against associated objects.  This allows CGI.pm to be
+    # case-sensitive and still work with asssociate.
+    my (%case_map, $lparam);
+    foreach my $associated_object (@{$options->{associate}}) {
+      map {
+        $case_map{$associated_object}{lc($_)} = $_
+      } $associated_object->param();
+    }
+
     foreach my $param (keys %{$self->{param_map}}) {
-      if (!defined($self->param($param))) {
+      unless (defined($self->param($param))) {
       OBJ: foreach my $associated_object (@{$options->{associate}}) {
-          my $value = $associated_object->param($param);          
-          if (defined($value)) {
-            $self->param($param, $value);
-            last OBJ;
-          }
+          $self->param($param, $associated_object->param($case_map{$associated_object}{$param})), last OBJ
+            if (exists($case_map{$associated_object}{$param}));
         }
       }
     }
@@ -2043,6 +1978,8 @@ sub output {
 
     if ($type eq 'SCALAR') {
       $result .= $$line;
+    } elsif ($type eq 'HTML::Template::VAR' and ref($$line) eq 'CODE') {
+      defined($$line) and $result .= $$line->();
     } elsif ($type eq 'HTML::Template::VAR') {
       defined($$line) and $result .= $$line;
     } elsif ($type eq 'HTML::Template::LOOP') {
@@ -2091,6 +2028,9 @@ sub output {
       die "HTML::Template::output() : Unknown item in parse_stack : " . $type;
     }
   }
+
+  print STDERR "### HTML::Template Memory Debug ### END OUTPUT ", $self->{proc_mem}->size(), "\n"
+    if $options->{memory_debug};
 
   return $result;
 }

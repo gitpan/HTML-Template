@@ -28,6 +28,8 @@ $template->param('ADJECTIVE', 'very');
 my $output =  $template->output;
 if ($output =~ /ADJECTIVE/) {
   die "not ok 2\n";
+} elsif ($template->param('ADJECTIVE') ne 'very') {
+  die "not ok 2\n";
 } elsif ($output =~ /very/) {
   print "ok 2\n";
 } else {
@@ -271,7 +273,7 @@ $template = HTML::Template->new(
                                );
 $template->param(STUFF => '<>"'); #"
 $output = $template->output;
-if ($output =~ /[<>"]/) {
+if ($output =~ /[<>"]/) { #"
   die "not ok 16\n";
 } else {
   print "ok 16\n";
@@ -403,8 +405,9 @@ if (!exists($ENV{TEST_SHARED_MEMORY}) or !$ENV{TEST_SHARED_MEMORY}) {
   print "skipped 24 - shared memory cache test.  See README to enable.\n";
 } else {
   my $template_prime = HTML::Template->new(
-                                     filename => 'templates/simple-loop.tmpl',
-                                     shared_cache => 1,
+                                           filename => 'templates/simple-loop.tmpl',
+                                           shared_cache => 1,
+                                           # cache_debug => 1,
                                     );
 
   my $template = HTML::Template->new(
@@ -422,4 +425,39 @@ if (!exists($ENV{TEST_SHARED_MEMORY}) or !$ENV{TEST_SHARED_MEMORY}) {
   }
 }
 
-    
+# test CGI associate bug    
+eval { require 'CGI.pm'; };
+if ($@) {
+  print "skipped 25 - need CGI.pm to test associate\n";
+} else {
+  my $query = CGI->new('');
+  $query->param('AdJecTivE' => 'very');
+  my $template = HTML::Template->new(
+                                     filename => 'templates/simple.tmpl',
+                                     debug => 0,
+                                     associate => $query,
+                                    );
+  my $output =  $template->output;
+  if ($output =~ /ADJECTIVE/) {
+    die "not ok 25\n";
+  } elsif ($output =~ /very/) {
+    print "ok 25\n";
+  } else {
+    die "not ok 25\n";
+  }
+}
+
+# test subroutine as VAR
+$template = HTML::Template->new(
+                                filename => 'templates/simple.tmpl',
+                                debug => 0,
+                               );
+$template->param(ADJECTIVE => sub { return 'v' . '1e' . '2r' . '3y'; });
+my $output =  $template->output;
+if ($output =~ /ADJECTIVE/) {
+  die "not ok 26\n";
+} elsif ($output =~ /v1e2r3y/) {
+  print "ok 26\n";
+} else {
+  die "not ok 26\n";
+}

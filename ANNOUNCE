@@ -1,19 +1,16 @@
-ANNOUNCEMENT: NEW VERSION: HTML::Template 1.4
-
-NAME
+ANNOUNCEMENT: NEW VERSION: HTML::Template 1.5
 
 HTML::Template - a Perl module to use HTML Templates
 
 CHANGES
 
-1.4
+1.5
 
-- New feature: new() option 'shared_cache' enables experimental IPC
-  shared memory caching!
-- TMPL_IF now works on TMPL_LOOP variables.
-- Public CVS server available at www.sourceforge.net.
-- Bug Fix from Doug Steinwand: loop_context_vars not working on
-  one-item loops.
+- Shared memory cache now uses IPC::SharedCache - it is ready for
+  mainstream use.  
+- New Feature: param() accepts subroutine refs for TMPL_VARs.
+- Bug Fix: mixed case associated CGI.pm parameters now work properly.
+
 
 DESCRIPTION
 
@@ -33,14 +30,15 @@ README.
 
 AVAILABILITY
 
-The module is available on CPAN.  You can get it using CPAN.pm or go
-to:
+This module is available on SourceForge.  Download it at:
+
+  http://download.sourceforge.net/HTML-Template/HTML-Template-1.5.tar.gz
+
+The module is also available on CPAN.  You can get it using CPAN.pm or
+go to:
 
   http://www.cpan.org/authors/id/S/SA/SAMTREGAR/
 
-If you don't find it there then you can try:
-
-  http://sourceforge.net/download.php?fileid=1173
 
 MOTIVATION
 
