@@ -3,7 +3,7 @@ package HTML::Template;
 use strict;
 use integer;
 use vars qw( $VERSION %CACHE );
-$VERSION = 0.9;
+$VERSION = 0.91;
 
 %CACHE = ();
 
@@ -894,8 +894,10 @@ sub _pre_parse {
             push(@pstack, \$pre);
           }
 
-          # connect the matching to this "address"
-          $if->[1] = ($#pstack + 1);
+          # connect the matching to this "address" - place a NOOP to hold the spot.
+          push(@pstack, HTML::Template::NOOP->new());
+          $if->[1] = $#pstack;
+          
 
           # next line
           $line = $post;
@@ -1117,6 +1119,8 @@ sub output {
         $x = $line->[1];
     } elsif ($type eq 'HTML::Template::ELSE') {
       (defined(${$line->[0]}) and ${$line->[0]}) and $x = $line->[1];
+    } elsif ($type eq 'HTML::Template::NOOP') {
+      next;
     } else {
       die "HTML::Template::output() : Unknown item in parse_stack : " . $type;
     }
@@ -1197,7 +1201,14 @@ sub new {
   return $self;
 }
 
+package HTML::Template::NOOP;
 
+sub new {
+  my $pkg = shift;
+  my $self = \$pkg;
+  bless($self, $pkg);
+  return $self;
+}
 
 1;
 
@@ -1226,6 +1237,7 @@ provided by:
    Kevin Puetz
    Steve Reppucci
    Richard Dice
+   Tom Huskins
 
 Thanks!
 

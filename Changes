@@ -59,3 +59,6 @@ Revision history for Perl extension HTML::Template.
         - bug fix : param() wasn't returning names of LOOPs
         - This really is version 0.9 so 1.0 is coming up.  Get those bug reports in!
 
+0.91
+        - bug fix: possible loss of text after a </TMPL_IF>
+          (Thanks to Tom Huskins for alerting me to this one!)
