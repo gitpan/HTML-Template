@@ -54,14 +54,17 @@ require '../Template.pm';
 # a hash of option hashes to test
 my %options = (
                'no cache' => {},
-               'simple cache' => { cache => 1 },
-               'shared cache' => { shared_cache => 1, cache => 1 },
+               #'simple cache' => { cache => 1 },
+               # 'shared cache' => { shared_cache => 1, cache => 1 },
+               #'file cache' => { file_cache => 1, 
+               #                  file_cache_dir => './file_cache' },
 #               'simple cache, no_includes' => { cache => 1, no_includes => 1},
 #               'blind cache' => { blind_cache => 1},
               );
 
 # number of times over each template
 my $n = 100;
+#open(OUT, ">test.out");
 
 foreach my $template (keys %templates) {
   print "\nTESTING : $template : $n iterations\n\n";
@@ -76,6 +79,8 @@ foreach my $template (keys %templates) {
         $template->param($name => $templates{$template}->[1]->{$name});
       }
       my $result = $template->output;
+      #print OUT $result;
+      #$template->output(print_to => *OUT);
     }
 
     my $end_time = (times)[0];

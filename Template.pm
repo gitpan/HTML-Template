@@ -1,6 +1,6 @@
 package HTML::Template;
 
-$HTML::Template::VERSION = '2.0';
+$HTML::Template::VERSION = '2.1';
 
 =head1 NAME
 
@@ -522,6 +522,42 @@ templates stuck permanently in shared memory!
 
 =item *
 
+file_cache - if set to 1 the module will store its cache in a file
+using the Storable module.  It uses no additional memory, and my
+simplistic testing shows that it yields a 50% performance advantage.
+Like shared_cache, it will work in a CGI environment. Default is 0.
+
+If you set this option you must set the "file_cache_dir" option.  See
+below for details.
+
+NOTE: Storable using flock() to ensure safe access to cache files.
+Using file_cache on a system or filesystem (NFS) without flock()
+support is dangerous.
+
+
+=item *
+
+file_cache_dir - sets the directory where the module will store the
+cache files if file_cache is enabled.  Your script will need write
+permissions to this directory.  You'll also need to make sure the
+sufficient space is available to store the cache files.
+
+=item *
+
+file_cache_dir_mode - sets the file mode for newly created file_cache
+directories and subdirectories.  Defaults to 0700 for security but
+this may be inconvenient if you do not have access to the account
+running the webserver.
+
+=item *
+
+double_file_cache - if set to 1 the module will use a combination of
+file_cache and normal cache mode for the best possible caching.  The
+file_cache_* options that work with file_cache apply to double_file_cache
+as well.  By default double_file_cache is 0.
+
+=item *
+
 associate - this option allows you to inherit the parameter values
 from other objects.  The only requirement for the other object is that
 it have a param() method that works like HTML::Template's param().  A
@@ -551,7 +587,23 @@ considered obsolete.
 
 NOTE: The parameter names are matched in a case-insensitve manner.  If
 you have two parameters in a CGI object like 'NAME' and 'Name' one
-will be chosen randomly by associate.
+will be chosen randomly by associate.  This behavior can be changed by
+the following option.
+
+=item *
+
+case_sensitive - setting this option to true causes HTML::Template to
+treat template variable names case-sensitively.  The following example
+would only set one parameter without the "case_sensitive" option:
+
+  my $template = HTML::Template->new(filename => 'template.tmpl',
+                                     case_sensitive => 1);
+  $template->param(
+    FieldA => 'foo',
+    fIELDa => 'bar',
+  );
+
+This option defaults to off.
 
 =item *
 
@@ -661,6 +713,59 @@ value outside the loop is not available inside the loop.
 
 =item *
 
+filter - this option allows you to specify a filter for your template
+files.  A filter is a subroutine that will be called after
+HTML::Template reads your template file but before it starts parsing
+template tags.
+
+In the most simple usage, you simply assign a code reference to the
+filter parameter.  This subroutine will recieve a single arguement - a
+reference to a string containing the template file text.  Here is an
+example that accepts templates with tags that look like "!!!ZAP_VAR
+FOO!!!" and transforms them into HTML::Template tags:
+
+   my $filter = sub {
+     my $text_ref = shift;
+     $$text_ref =~ s/!!!ZAP_(.*?)!!!/<TMPL_$1>/g;
+   }   
+
+   # open zap.tmpl using the above filter
+   my $template = HTML::Template->new(filename => 'zap.tmpl',
+                                      filter => $filter);
+
+More complicated usages are possible.  You can request that your
+filter receieve the template text as an array of lines rather than as
+a single scalar.  To do that you need to specify your filter using a
+hash-ref.  In this form you specify the filter using the "sub" key and
+the desired argument format using the "format" key.  The available
+formats are "scalar" and "array".
+
+   my $template = HTML::Template->new(filename => 'zap.tmpl',
+                                      filter => { sub => $filter,
+                                                  format => 'array' });
+
+Using the 'array' format is likely to be more efficient since this is
+how HTML::Template stores the template text internally.  This may
+change in the future.
+
+You may also have multiple filters.  This allows simple filters to be
+combined for more elaborate functionality.  To do this you specify an
+array of filters.  The filters are applied in the order they are
+specified.
+
+   my $template = HTML::Template->new(filename => 'zap.tmpl',
+                                      filter => [ 
+                                           { sub => \&decompress,
+                                             format => 'scalar' },
+                                           { sub => \&remove_spaces,
+                                             format => 'array' }
+                                        ]);
+
+The specified filters will be called for any TMPL_INCLUDEed files just
+as they are for the main template file.
+
+=item *
+
 vanguard_compatibility_mode - if set to 1 the module will expect to
 see <TMPL_VAR>s that look like %NAME% in addition to the standard
 syntax.  Also sets die_on_bad_params => 0.  If you're not at Vanguard
@@ -742,6 +847,9 @@ sub new {
                search_path_on_include => 0,
                cache => 0,               
                blind_cache => 0,
+	       file_cache => 0,
+	       file_cache_dir => '',
+	       file_cache_dir_mode => 0700,
                cache_debug => 0,
                shared_cache_debug => 0,
                memory_debug => 0,
@@ -754,12 +862,15 @@ sub new {
                max_includes => 10,
                shared_cache => 0,
                double_cache => 0,
+               double_file_cache => 0,
                ipc_key => 'TMPL',
                ipc_mode => 0666,
                ipc_segment_size => 65536,
                ipc_max_size => 0,
                global_vars => 0,
                no_includes => 0,
+               case_sensitive => 0,
+               filter => [],
               );
   
   # load in options supplied to new()
@@ -774,9 +885,16 @@ sub new {
   # shared_cache = 1 implies cache = 1
   $options->{shared_cache} and $options->{cache} = 1;
 
-  # double_cache is a combination of the two modes.
+  # file_cache = 1 implies cache = 1
+  $options->{file_cache} and $options->{cache} = 1;
+
+  # double_cache is a combination of shared_cache and cache.
   $options->{double_cache} and $options->{cache} = 1;
   $options->{double_cache} and $options->{shared_cache} = 1;
+
+  # double_file_cache is a combination of file_cache and cache.
+  $options->{double_file_cache} and $options->{cache} = 1;
+  $options->{double_file_cache} and $options->{file_cache} = 1;
 
   # vanguard_compatibility_mode implies die_on_bad_params = 0
   $options->{vanguard_compatibility_mode} and 
@@ -803,13 +921,17 @@ sub new {
   if (ref($options->{path}) ne 'ARRAY') {
     $options->{path} = [ $options->{path} ];
   }
+
+  # filter should be an array if it's not already
+  if (ref($options->{filter}) ne 'ARRAY') {
+    $options->{filter} = [ $options->{filter} ];
+  }
   
   # make sure objects in associate area support param()
   foreach my $object (@{$options->{associate}}) {
     defined($object->can('param')) or
       croak("HTML::Template->new called with associate option, containing object of type " . ref($object) . " which lacks a param() method!");
   } 
-
 
   # check for syntax errors:
   my $source_count = 0;
@@ -829,6 +951,21 @@ sub new {
     $self->{gtop} = GTop->new();
     $self->{proc_mem} = $self->{gtop}->proc_mem($$);
     print STDERR "\n### HTML::Template Memory Debug ### START ", $self->{proc_mem}->size(), "\n";
+  }
+
+  if ($options->{file_cache}) {
+    # make sure we have a file_cache_dir option
+    croak("You must specify the file_cache_dir option if you want to use file_cache.") 
+      unless defined $options->{file_cache_dir} and 
+        length $options->{file_cache_dir};
+
+    # file_cache needs some extra modules loaded
+    eval { require Storable; };
+    croak("Could not load Storable.  You must have Storable installed to use HTML::Template in file_cache mode.  The error was: $@")
+      if ($@);
+    eval { require Digest::MD5; };
+    croak("Could not load Digest::MD5.  You must have Digest::MD5 installed to use HTML::Template in file_cache mode.  The error was: $@")
+      if ($@);
   }
 
   if ($options->{shared_cache}) {
@@ -930,9 +1067,23 @@ sub _init {
     # put it in the local cache if we got it.
     $self->_commit_to_cache()
       if (defined $self->{param_map} and defined $self->{parse_stack});
+  } elsif ($options->{double_file_cache}) {
+    # try the normal cache, return if we have it.
+    $self->_fetch_from_cache();
+    return if (defined $self->{param_map} and defined $self->{parse_stack});
+
+    # try the file cache
+    $self->_fetch_from_file_cache();
+
+    # put it in the local cache if we got it.
+    $self->_commit_to_cache()
+      if (defined $self->{param_map} and defined $self->{parse_stack});
   } elsif ($options->{shared_cache}) {
     # try the shared cache
     $self->_fetch_from_shared_cache();
+  } elsif ($options->{file_cache}) {
+    # try the file cache
+    $self->_fetch_from_file_cache();
   } elsif ($options->{cache}) {
     # try the normal cache
     $self->_fetch_from_cache();
@@ -948,9 +1099,14 @@ sub _init {
 
   # now that we have a full init, cache the structures if cacheing is
   # on.  shared cache is already cool.
+  if($options->{file_cache}){
+    $self->_commit_to_file_cache();
+  }
   $self->_commit_to_cache() if (($options->{cache}
-                                and not $options->{shared_cache}) or
-                                ($options->{double_cache}));
+                                and not $options->{shared_cache}
+				and not $options->{file_cache}) or
+                                ($options->{double_cache}) or
+				($options->{double_file_cache}));
 }
 
 # Caching subroutines - they handle getting and validating cache
@@ -1033,6 +1189,130 @@ sub _commit_to_cache {
   $CACHE{$filepath}{parse_stack} = $self->{parse_stack};
   exists($self->{included_mtimes}) and
     $CACHE{$filepath}{included_mtimes} = $self->{included_mtimes};
+}
+
+# generates MD5 from filepath to determine filename for cache file
+sub _get_cache_filename {
+  my ($self, $filepath) = @_;
+
+  # hash the filename ...
+  my $hash = Digest::MD5->md5_hex($filepath);
+  
+  # ... and build a path out of it.  Using the first two charcters
+  # gives us 255 buckets.  This means you can have 255,000 templates
+  # in the cache before any one directory gets over a few thousand
+  # files in it.  That's probably pretty good for this planet.  If not
+  # then it should be configurable.
+  if (wantarray) {
+    return (substr($hash,0,2), substr($hash,2))
+  } else {
+    return File::Spec->join($self->{options}{file_cache_dir}, 
+                            substr($hash,0,2), substr($hash,2));
+  }
+}
+
+# handles the file cache
+sub _fetch_from_file_cache {
+  my $self = shift;
+  my $options = $self->{options};
+  return unless exists($options->{filename});
+  
+  # return if there's no cache entry for this filename
+  my $filepath = $self->_find_file($options->{filename});
+  return unless defined $filepath;
+  my $cache_filename = $self->_get_cache_filename($filepath);
+  return unless -e $cache_filename;
+  
+  eval {
+    $self->{record} = Storable::lock_retrieve($cache_filename);
+  };
+  croak("HTML::Template::new() - Problem reading cache file $cache_filename (file_cache => 1) : $@")
+    if $@;
+  croak("HTML::Template::new() - Problem reading cache file $cache_filename (file_cache => 1) : $!") 
+    unless defined $self->{record};
+
+  ($self->{mtime}, 
+   $self->{included_mtimes}, 
+   $self->{param_map}, 
+   $self->{parse_stack}) = @{$self->{record}};
+  
+  $options->{filepath} = $filepath;
+
+  # validate the cache
+  my $mtime = $self->_mtime($filepath);
+  if (defined $mtime) {
+    # return if the mtime doesn't match the cache
+    if (defined($self->{mtime}) and 
+        ($mtime != $self->{mtime})) {
+      $options->{cache_debug} and 
+        print STDERR "### HTML::Template Cache Debug ### FILE CACHE MISS : $filepath : $mtime\n";
+      return;
+    }
+
+    # if the template has includes, check each included file's mtime
+    # and return if different
+    if (exists($self->{included_mtimes})) {
+      foreach my $filename (keys %{$self->{included_mtimes}}) {
+        next unless 
+          defined($self->{included_mtimes}{$filename});
+        
+        my $included_mtime = (stat($filename))[9];
+        if ($included_mtime != $self->{included_mtimes}{$filename}) {
+          $options->{cache_debug} and 
+            print STDERR "### HTML::Template Cache Debug ### FILE CACHE MISS : $filepath : INCLUDE $filename : $included_mtime\n";
+          
+          return;
+        }
+      }
+    }
+  }
+
+  # got a cache hit!
+  $options->{cache_debug} and print STDERR "### HTML::Template Cache Debug ### FILE CACHE HIT : $filepath\n";
+
+  # clear out values from param_map from last run
+  $self->_normalize_options();
+  $self->clear_params();
+}
+
+sub _commit_to_file_cache {
+  my $self = shift;
+  my $options = $self->{options};
+
+  my $filepath = $options->{filepath};
+  if (not defined $filepath) {
+    $filepath = $self->_find_file($options->{filename});
+    confess("HTML::Template->new() : Cannot open included file $options->{filename} : file not found.")
+      unless defined($filepath);
+    $options->{filepath} = $filepath;   
+  }
+
+  my ($cache_dir, $cache_file) = $self->_get_cache_filename($filepath);  
+  $cache_dir = File::Spec->join($options->{file_cache_dir}, $cache_dir);
+  if (not -d $cache_dir) {
+    if (not -d $options->{file_cache_dir}) {
+      mkdir($options->{file_cache_dir},$options->{file_cache_dir_mode})
+	or croak("HTML::Template->new() : can't mkdir $options->{file_cache_dir} (file_cache => 1): $!");
+    }
+    mkdir($cache_dir,$options->{file_cache_dir_mode})
+      or croak("HTML::Template->new() : can't mkdir $cache_dir (file_cache => 1): $!");
+  }
+
+  $options->{cache_debug} and print STDERR "### HTML::Template Cache Debug ### FILE CACHE LOAD : $options->{filepath}\n";
+
+  my $result;
+  eval {
+    $result = Storable::lock_store([ $self->{mtime},
+                                     $self->{included_mtimes}, 
+                                     $self->{param_map}, 
+                                     $self->{parse_stack} ],
+                                   scalar File::Spec->join($cache_dir, $cache_file)
+                                  );
+  };
+  croak("HTML::Template::new() - Problem writing cache file $cache_dir/$cache_file (file_cache => 1) : $@")
+    if $@;
+  croak("HTML::Template::new() - Problem writing cache file $cache_dir/$cache_file (file_cache => 1) : $!")
+    unless defined $result;
 }
 
 # Shared cache routines.
@@ -1239,7 +1519,61 @@ sub _init_template {
   print STDERR "### HTML::Template Memory Debug ### END INIT_TEMPLATE ", $self->{proc_mem}->size(), "\n"
     if $options->{memory_debug};
 
+  # handle filters if necessary
+  $self->_call_filters($self->{template}) if @{$options->{filter}};
+
   return $self;
+}
+
+# handle calling user defined filters
+sub _call_filters {
+  my $self = shift;
+  my $template = shift;
+  my $options = $self->{options};
+
+  my ($format, $sub, $template_scalar);
+  foreach my $filter (@{$options->{filter}}) {
+    croak("HTML::Template->new() : bad value set for filter parameter - must be a code ref or a hash ref.")
+      unless ref $filter;
+
+    # translate into CODE->HASH
+    $filter = { format => 'scalar', sub => $filter }
+      if (ref $filter eq 'CODE');
+
+    if (ref $filter eq 'HASH') {
+      $format = $filter->{format};
+      $sub = $filter->{sub};
+
+      # check types and values
+      croak("HTML::Template->new() : bad value set for filter parameter - hash must contain \"format\" key and \"sub\" key.")
+        unless defined $format and defined $sub;
+      croak("HTML::Template->new() : bad value set for filter parameter - \"format\" must be either 'array' or 'scalar'")
+        unless $format eq 'array' or $format eq 'scalar';
+      croak("HTML::Template->new() : bad value set for filter parameter - \"sub\" must be a code ref")
+        unless ref $sub and ref $sub eq 'CODE';
+
+      # catch errors
+      eval {
+        if ($format eq 'scalar') {
+          # modulate
+          $template_scalar = join('', @$template);
+          # call
+          $sub->(\$template_scalar);
+          # demodulate
+          @$template = split("\n", $template_scalar);
+          foreach my $line (@$template) { $line .= "\n"; }
+        } else {
+          # call
+          $sub->($template);
+        }
+      };
+      croak("HTML::Template->new() : fatal error occured during filter call: $@") if $@;
+    } else {
+      croak("HTML::Template->new() : bad value set for filter parameter - must be code ref or hash ref");
+    }
+  }
+  # all done
+  return $template;
 }
 
 # _parse sifts through a template building up the param_map and
@@ -1442,7 +1776,7 @@ sub _parse {
         $name = $7 if defined($7);
 
         # allow mixed case in filenames, otherwise flatten
-        $name = lc($name) unless ($which eq 'TMPL_INCLUDE');
+        $name = lc($name) unless ($which eq 'TMPL_INCLUDE' or $options->{case_sensitive});
 
         $post = $10; # what comes after on the line
 
@@ -1767,6 +2101,9 @@ sub _parse {
           my @templateArray = <TEMPLATE>;
           close(TEMPLATE);
 
+          # call filters if necessary
+          $self->_call_filters(\@templateArray) if @{$options->{filter}};
+
           $line = $post, next PASS 
             unless (scalar(@templateArray));
 
@@ -1967,7 +2304,7 @@ sub param {
   # the one-parameter case - could be a parameter value request or a
   # hash-ref.
   if (!scalar(@_) and !length($type)) {
-    my $param = lc $first;
+    my $param = $options->{case_sensitive} ? $first : lc $first;
     
     # check for parameter existence 
     $options->{die_on_bad_params} and !exists($param_map->{$param}) and
@@ -1996,7 +2333,7 @@ sub param {
   # loop causes perl 5.004_04 to die with some nonsense about a
   # read-only value.
   for (my $x = 0; $x <= $#_; $x += 2) {
-    my $param = lc $_[$x];
+    my $param = $options->{case_sensitive} ? $_[$x] : lc $_[$x];
     my $value = $_[($x + 1)];
     
     # check that this param exists in the template
@@ -2056,7 +2393,8 @@ sub associateCGI {
 
 =head2 output()
 
-output() returns the final result of the template.  In most situations you'll want to print this, like:
+output() returns the final result of the template.  In most situations
+you'll want to print this, like:
 
    print $template->output();
 
@@ -2069,12 +2407,24 @@ Calling output() is guaranteed not to change the state of the
 Template object, in case you were wondering.  This property is mostly
 important for the internal implementation of loops.
 
+You may optionally supply a filehandle to print to automatically as
+the template is generated.  This may improve performance and lower
+memory consumption.  Example:
+
+   $template->output(print_to => *STDOUT);
+
+The return value is undefined when using the "print_to" option.
+
 =cut
 
 use vars qw(%URLESCAPE_MAP);
 sub output {
   my $self = shift;
   my $options = $self->{options};
+
+  croak("HTML::Template->output() : You gave me an odd number of parameters to output()!")
+    unless ((@_ % 2) == 0);
+  my %args = @_;
 
   print STDERR "### HTML::Template Memory Debug ### START OUTPUT ", $self->{proc_mem}->size(), "\n"
     if $options->{memory_debug};
@@ -2095,15 +2445,22 @@ sub output {
     # case-sensitive and still work with asssociate.
     my (%case_map, $lparam);
     foreach my $associated_object (@{$options->{associate}}) {
-      map {
-        $case_map{$associated_object}{lc($_)} = $_
-      } $associated_object->param();
+      # what a hack!  This should really be optimized out for case_sensitive.
+      if ($options->{case_sensitive}) {
+        map {
+          $case_map{$associated_object}{$_} = $_
+        } $associated_object->param();
+      } else {
+        map {
+          $case_map{$associated_object}{lc($_)} = $_
+        } $associated_object->param();
+      }
     }
 
     foreach my $param (keys %{$self->{param_map}}) {
       unless (defined($self->param($param))) {
       OBJ: foreach my $associated_object (@{$options->{associate}}) {
-          $self->param($param, $associated_object->param($case_map{$associated_object}{$param})), last OBJ
+          $self->param($param, scalar $associated_object->param($case_map{$associated_object}{$param})), last OBJ
             if (exists($case_map{$associated_object}{$param}));
         }
       }
@@ -2115,12 +2472,16 @@ sub output {
   # walk the parse stack, accumulating output in $result
   *parse_stack = $self->{parse_stack};
   my $result = '';
+
+  tie $result, 'HTML::Template::PRINTSCALAR', $args{print_to}
+    if (defined $args{print_to});
+  
   my $type;
   my $parse_stack_length = $#parse_stack;
   for (my $x = 0; $x <= $parse_stack_length; $x++) {
     *line = \$parse_stack[$x];
     $type = ref($line);
-
+    
     if ($type eq 'SCALAR') {
       $result .= $$line;
     } elsif ($type eq 'HTML::Template::VAR' and ref($$line) eq 'CODE') {
@@ -2168,6 +2529,7 @@ sub output {
         $toencode=~s/\"/&quot;/g; #"
         $toencode=~s/>/&gt;/g;
         $toencode=~s/</&lt;/g;
+        $toencode=~s/'/&#39;/g; #'
         
         $result .= $toencode;
       }
@@ -2192,7 +2554,8 @@ sub output {
 
   print STDERR "### HTML::Template Memory Debug ### END OUTPUT ", $self->{proc_mem}->size(), "\n"
     if $options->{memory_debug};
-
+    
+  return undef if defined $args{print_to};
   return $result;
 }
 
@@ -2330,7 +2693,7 @@ sub query {
 # its (their) ref()(s).  Used by query() in the obvious way.
 sub _find_param {
   my $self = shift;
-  my $spot = lc shift;
+  my $spot = $self->{options}{case_sensitive} ? shift : lc shift;
 
   # get the obj and type for this spot
   my $obj = $self->{'param_map'}{$spot};
@@ -2439,6 +2802,17 @@ sub new {
   return $self;
 }
 
+# scalar-tying package for output(print_to => *HANDLE) implementation
+package HTML::Template::PRINTSCALAR;
+use strict;
+
+sub TIESCALAR { bless \$_[1], $_[0]; }
+sub FETCH { }
+sub STORE {
+  my $self = shift;
+  local *FH = $$self;
+  print FH @_;
+}
 1;
 __END__
 
@@ -2635,6 +3009,9 @@ provided by:
    uchum
    Kawai Takanori
    Peter Guelich
+   Chris Nokleberg
+   Ralph Corderoy
+   William Ward
 
 Thanks!
 

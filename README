@@ -73,6 +73,12 @@ HTML::Template, either CPAN or SourceForge) and then do:
 
        TEST_SHARED_MEMORY=1 make test
 
+If you plan to use the file cache you might want to test it before you
+install.  Make sure you have an up-to-date copy of Storable and
+Digest::MD5 (both available on CPAN) installed and then do:
+
+       TEST_FILE_CACHE=1 make test
+
 CONTACT INFO
 
 This module was written by Sam Tregar (sam@tregar.com) for Vanguard

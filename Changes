@@ -164,4 +164,18 @@ Revision history for Perl extension HTML::Template.
       - Bug Fix: vanguard_compatibility_mode was broken on first line of
         included files. (uchum)
 
-      
+2.1 Sun December 18 12:00:00 2000
+      - New Feature: new 'file_cache' and 'double_file_cache' options
+        provide a file based caching method (T.J. Mather)
+      - New Feature: new 'print_to' option for output() allows
+        output() to print to a filehandle as it runs. 
+        (Chris Nokleberg)
+      - New Feature: new 'case_sensitive' option to allow template
+        variable names to be case sensitive. (Matthew Wickline)       
+      - New Feature: new 'filter' option allows pre-parse filtering of
+        template files.
+      - Bug Fix: added single-quote escaping to HTML escaping code 
+        (Ralph Corderoy)
+      - Bug Fix: fixed a noisy bug in param() when used with 'associate'
+        (William Ward)
+      - Doc Fix: broke out FAQ into separate file.

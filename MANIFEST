@@ -28,9 +28,12 @@ templates/vanguard1.tmpl
 templates/vanguard2.tmpl
 templates/loop-context.tmpl
 templates/searchpath/included.tmpl
+templates/include_path/a.tmpl
+templates/include_path/b.tmpl
 scripts/time_trial.pl
 scripts/clean_shm.pl
 README
 GPL
 ARTISTIC
 ANNOUNCE
+FAQ

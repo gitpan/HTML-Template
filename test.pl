@@ -6,7 +6,7 @@
 # Change 1..1 below to 1..last_test_to_print .
 # (It may become useful if the test is moved to ./t subdirectory.)
 
-BEGIN { $| = 1; print "1..35\n"; }
+BEGIN { $| = 1; print "1..36\n"; }
 END {print "not ok 1\n" unless $loaded;}
 use HTML::Template;
 $loaded = 1;
@@ -288,9 +288,9 @@ $template = HTML::Template->new(
                                 filename => 'escape.tmpl',
                                 # debug => 1,
                                );
-$template->param(STUFF => '<>"'); #"
+$template->param(STUFF => '<>"\''); #"
 $output = $template->output;
-if ($output =~ /[<>"]/) { #"
+if ($output =~ /[<>"']/) { #"
   die "not ok 16\n";
 } else {
   print "ok 16\n";
@@ -692,3 +692,157 @@ if (not defined $@ or $@ !~ /no_includes/) {
 } else {
   print "ok 35\n";
 }
+
+# test file cache - non automated, requires turning on debug watching STDERR!
+if (!exists($ENV{TEST_FILE_CACHE}) or !$ENV{TEST_FILE_CACHE}) {
+  print "skipped 36 - file cache test.  See README to enable.\n";
+} else {
+  $template = HTML::Template->new(
+                                  path => ['templates/'],
+                                  filename => 'simple.tmpl',
+                                  file_cache_dir => './blib/temp_cache_dir',
+                                  file_cache => 1,
+                                  #cache_debug => 1,
+                                  #debug => 0,
+                                 );
+  $template->param(ADJECTIVE => sub { "3y"; });
+  $output =  $template->output;
+  $template = HTML::Template->new(
+                                  path => ['templates/'],
+                                  filename => 'simple.tmpl',
+                                  file_cache_dir => './blib/temp_cache_dir',
+                                  file_cache => 1,
+                                  #cache_debug => 1,
+                                  #debug => 0,
+                                 );
+  if ($output =~ /ADJECTIVE/) {
+    die "not ok 36\n";
+  } elsif ($output =~ /3y/) {
+    print "ok 36\n";
+  } else {
+    die "not ok 36\n";
+  }
+}
+
+$template = HTML::Template->new(filename => './templates/include_path/a.tmpl');
+$output =  $template->output;
+if ($output !~ /Bar/) {
+  die "not ok 37\n";
+}
+print "ok 37\n";
+
+open(OUT, ">blib/test.out") or die $!;
+$template = HTML::Template->new(filename => './templates/include_path/a.tmpl');
+$template->output(print_to => *OUT);
+close(OUT);
+open(OUT, "blib/test.out") or die $!;
+my $output = join('',<OUT>);
+close(OUT);
+if ($output !~ /Bar/) {
+  die "not ok 38\n";
+}
+print "ok 38\n";
+
+
+my $test = 39; # test with case sensitive params on
+my $template_source = <<END_OF_TMPL;
+  I am a <TMPL_VAR NAME="adverb"> <TMPL_VAR NAME="ADVERB"> simple template.
+END_OF_TMPL
+$template = HTML::Template->new(
+                                scalarref => \$template_source,
+                                case_sensitive => 1,
+                                debug => 0
+                               );
+
+$template->param('adverb', 'very');
+$template->param('ADVERB', 'painfully');
+$output =  $template->output;
+if ($output =~ /ADVERB/i) {
+  die "not ok $test\n";
+} elsif ($template->param('ADVERB') ne 'painfully') {
+  die "not ok $test\n";
+} elsif ($template->param('adverb') ne 'very') {
+  die "not ok $test\n";
+} elsif ($output =~ /very painfully/) {
+  print "ok $test\n";
+} else {
+  die "not ok $test : $output\n";
+}
+
+$test = 40; # test with case sensitive params off
+$template_source = <<END_OF_TMPL;
+  I am a <TMPL_VAR NAME="adverb"> <TMPL_VAR NAME="ADVERB"> simple template.
+END_OF_TMPL
+$template = HTML::Template->new(
+                                scalarref => \$template_source,
+                                case_sensitive => 0,
+                                debug => 0
+                               );
+
+$template->param('adverb', 'very');
+$template->param('ADVERB', 'painfully');
+$output =  $template->output;
+if ($output =~ /ADVERB/i) {
+  die "not ok $test\n";
+} elsif ($template->param('ADVERB') ne 'painfully') {
+  die "not ok $test\n";
+} elsif ($template->param('adverb') ne 'painfully') {
+  die "not ok $test\n";
+} elsif ($output =~ /painfully painfully/) {
+  print "ok $test\n";
+} else {
+  die "not ok $test : $output\n";
+}
+
+
+$template = HTML::Template->new(filename => './templates/include_path/a.tmpl',
+                                filter => sub {
+                                  ${$_[0]} =~ s/Bar/Zanzabar/g;
+                                }
+                               );
+$output =  $template->output;
+if ($output !~ /Zanzabar/) {
+  die "not ok 41\n";
+}
+print "ok 41\n";
+
+$template = HTML::Template->new(filename => './templates/include_path/a.tmpl',
+                                filter => [
+                                           {
+                                            sub => sub {
+                                              ${$_[0]} =~ s/Bar/Zanzabar/g;
+                                            },
+                                            format => 'scalar'
+                                           },
+                                           {
+                                            sub => sub {
+                                              ${$_[0]} =~ s/bar/bar!!!/g;
+                                            },
+                                            format => 'scalar'
+                                           }
+                                          ]
+                               );
+$output =  $template->output;
+if ($output !~ /Zanzabar!!!/) {
+  die "not ok 42\n";
+}
+print "ok 42\n";
+
+$template = HTML::Template->new(filename => './templates/include_path/a.tmpl',
+                                filter => {
+                                           sub => sub {
+                                             $x = 1;
+                                             for (@{$_[0]}) {
+                                               $_ = "$x : $_";
+                                               $x++;
+                                             }
+                                           },
+                                           format => 'array',
+                                          }
+                               );
+$output =  $template->output;
+if ($output !~ /1 : Foo/) {
+  die "not ok 43\n";
+}
+print "ok 43\n";
+

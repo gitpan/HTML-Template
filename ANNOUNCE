@@ -1,25 +1,30 @@
-ANNOUNCEMENT: NEW VERSION: HTML::Template 2.0
+ANNOUNCEMENT: NEW VERSION: HTML::Template 2.1
 
 HTML::Template - a Perl module to use HTML Templates
 
 CHANGES
 
-2.0
+2.1
 
-- New Feature: new 'search_path_on_include' option (Jody Biggs)
+- New Feature: new 'file_cache' and 'double_file_cache' options
+  provide a file based caching method (T.J. Mather)
 
-- New Feature: much requested variable __ODD__ added to set of
-  loop_context_vars.
+- New Feature: new 'print_to' option for output() allows output() to
+  print to a filehandle as it runs.  (Chris Nokleberg)
 
-- New Feature: new 'no_includes' option (Scott Guelich)
+- New Feature: new 'case_sensitive' option to allow template variable
+  names to be case sensitive. (Matthew Wickline)
 
-- Doc Addition: Added link to Japanese translation (Kawai Takanori)
+- New Feature: new 'filter' option allows pre-parse filtering of
+  template files.
 
-- Bug Fix: loop_context_vars broken again (T.J. Mather, Martin Schroth
-  and Dave Wolfe)
+- Bug Fix: added single-quote escaping to HTML escaping code 
+  (Ralph Corderoy)
 
-- Bug Fix: vanguard_compatibility_mode was broken on first line of
-  included files. (uchum)
+- Bug Fix: fixed a noisy bug in param() when used with 'associate'
+  (William Ward)
+
+
 
 
 DESCRIPTION
@@ -34,6 +39,10 @@ variables, loops and branches declared in the template.  This allows
 you to seperate design - the HTML - from the data, which you generate
 in the Perl script.
 
+A Japanese translation of the documentation is available at:
+
+   http://member.nifty.ne.jp/hippo2000/perltips/html/template.htm
+
 This module is licenced under the GPL.  See the LICENCE section of the
 README.
 
@@ -42,7 +51,7 @@ AVAILABILITY
 
 This module is available on SourceForge.  Download it at:
 
-  http://download.sourceforge.net/HTML-Template/HTML-Template-1.9.tar.gz
+  http://download.sourceforge.net/HTML-Template/HTML-Template-2.1.tar.gz
 
 The module is also available on CPAN.  You can get it using CPAN.pm or
 go to:
