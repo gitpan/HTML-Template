@@ -1,4 +1,4 @@
-ANNOUNCEMENT: NEW VERSION: HTML::Template 1.3
+ANNOUNCEMENT: NEW VERSION: HTML::Template 1.4
 
 NAME
 
@@ -6,15 +6,14 @@ HTML::Template - a Perl module to use HTML Templates
 
 CHANGES
 
-1.3 
+1.4
 
-- Omnibus regex patch from Matthew Wickline: a faster and more robust
-  parse().
-- New tag: TMPL_UNLESS, the opposite of TMPL_IF.
-- Numerous bug fixes: mixed-case filenames in includes, recursive
-  TMPL_INCLUDEs, reporting filename and line number inside included
-  files, better syntax-error detection.
-- Optional loop context variables - __FIRST__, __LAST__ and __INNER__.
+- New feature: new() option 'shared_cache' enables experimental IPC
+  shared memory caching!
+- TMPL_IF now works on TMPL_LOOP variables.
+- Public CVS server available at www.sourceforge.net.
+- Bug Fix from Doug Steinwand: loop_context_vars not working on
+  one-item loops.
 
 DESCRIPTION
 
@@ -37,8 +36,11 @@ AVAILABILITY
 The module is available on CPAN.  You can get it using CPAN.pm or go
 to:
 
-http://www.cpan.org/authors/id/S/SA/SAMTREGAR/
+  http://www.cpan.org/authors/id/S/SA/SAMTREGAR/
 
+If you don't find it there then you can try:
+
+  http://sourceforge.net/download.php?fileid=1173
 
 MOTIVATION
 

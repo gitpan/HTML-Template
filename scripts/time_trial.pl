@@ -8,7 +8,7 @@
 require '../Template.pm';
 
 # an array of template files to test against and params to fill in
-my %templates = (simple => [
+ my %templates = (simple => [
                             '../templates/simple.tmpl',
                             {}                            
                            ],
@@ -44,13 +44,18 @@ my %templates = (simple => [
                            ],
                  long_loop => [ '../templates/long_loops.tmpl',
                                 {}
-                              ]
+                              ],
+                 loop_if => [ '../templates/loop-if.tmpl',
+                                {LOOP_ONE => [{VAR => 'foo'}]}
+                            ]
+
                 );
 
 # a hash of option hashes to test
 my %options = (
                'no cache' => {},
                'simple cache' => { cache => 1 },
+               'shared cache' => { shared_cache => 1 },
 #               'simple cache, no_includes' => { cache => 1, no_includes => 1},
 #               'blind cache' => { blind_cache => 1},
               );

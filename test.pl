@@ -6,7 +6,7 @@
 # Change 1..1 below to 1..last_test_to_print .
 # (It may become useful if the test is moved to ./t subdirectory.)
 
-BEGIN { $| = 1; print "1..21\n"; }
+BEGIN { $| = 1; print "1..23\n"; }
 END {print "not ok 1\n" unless $loaded;}
 use HTML::Template;
 $loaded = 1;
@@ -367,6 +367,59 @@ if ($output !~ /Apples, Oranges, Brains, Toes, and Kiwi./) {
   die "not ok 21\n";
 } else {
   print "ok 21\n";
+}
+
+$template = HTML::Template->new(
+                                filename => 'templates/loop-if.tmpl',
+                                #debug => 1,
+                                #debug_stack => 1
+                               );
+$output =  $template->output;
+if ($output !~ /Loop not filled in/) {
+  die "not ok 22\n";
+} else {
+  print "ok 22\n";
+}
+
+
+$template = HTML::Template->new(
+                                filename => 'templates/loop-if.tmpl',
+                                #debug => 1,
+                                #debug_stack => 1
+                               );
+$template->param(LOOP_ONE => [{VAR => "foo"}]);
+$output =  $template->output;
+if ($output =~ /Loop not filled in/) {
+  die "not ok 23\n";
+} elsif ($output !~ /foo/) {
+  die "not ok 23\n";
+} else {
+  print "ok 23\n";
+}
+
+# test shared memory - enable by setting the environment variable
+# TEST_SHARED_MEMORY to 1.
+if (!exists($ENV{TEST_SHARED_MEMORY}) or !$ENV{TEST_SHARED_MEMORY}) {
+  print "skipped 24 - shared memory cache test.  See README to enable.\n";
+} else {
+  my $template_prime = HTML::Template->new(
+                                     filename => 'templates/simple-loop.tmpl',
+                                     shared_cache => 1,
+                                    );
+
+  my $template = HTML::Template->new(
+                                     filename => 'templates/simple-loop.tmpl',
+                                     shared_cache => 1,
+                                    );
+  $template->param('ADJECTIVE_LOOP', [ { ADJECTIVE => 'really' }, { ADJECTIVE => 'very' } ] );
+  $output =  $template->output;
+  if ($output =~ /ADJECTIVE_LOOP/) {
+    die "not ok 24";
+  } elsif ($output =~ /really.*very/s) {
+    print "ok 24\n";
+  } else {
+    die "not ok 24";
+  }
 }
 
     

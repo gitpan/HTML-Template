@@ -108,3 +108,14 @@ Revision history for Perl extension HTML::Template.
           inside included files, better syntax-error detection.
         - Optional loop context variables - __FIRST__, __LAST__ and
           __INNER__.
+
+1.4 Sat January 8 12:00:00 2000
+       - New feature: new() option 'shared_cache' enables experimental
+         IPC shared memory caching!
+       - TMPL_IF now works on TMPL_LOOP variables.
+       - Public CVS server available at www.sourceforge.net.
+       - Bug Fix from Doug Steinwand: loop_context_vars not working
+         on one-item loops.
+
+
+

@@ -1,6 +1,6 @@
 package HTML::Template;
 
-$HTML::Template::VERSION = '1.3';
+$HTML::Template::VERSION = '1.4';
 
 =head1 NAME
 
@@ -146,15 +146,15 @@ ESCAPE=1, like this:
 
 You'll get what you wanted no matter what value happens to be passed
 in for param.  You can also write ESCAPE="1" and ESCAPE='1'.
-Substitute for the 1 and you turn off escaping, which is the default
-anyway.
+Substitute a 0 for the 1 and you turn off escaping, which is the
+default anyway.
 
 =head2 <TMPL_LOOP NAME="LOOP_NAME"> </TMPL_LOOP>
 
 The <TMPL_LOOP> tag is a bit more complicated.  The <TMPL_LOOP> tag
 allows you to delimit a section of text and give it a name.  Inside
 the <TMPL_LOOP> you place <TMPL_VAR>s.  Now you pass to param() a list
-(an array ref) of parameter assignments (hash refs) - the loop
+(an array ref) of parameter assignments (hash refs).  The loop
 iterates over this list and produces output from the text block for
 each pass.  Unset parameters are skipped.  Here's an example:
 
@@ -169,11 +169,10 @@ each pass.  Unset parameters are skipped.  Here's an example:
 
    In the script:
 
-   $template->param('EMPLOYEE_INFO', 
-                    [ 
-                     { name => 'Sam', job => 'programmer' },
-                     { name => 'Steve', job => 'soda jerk' },
-                    ],
+   $template->param(EMPLOYEE_INFO => [ 
+                                       { name => 'Sam', job => 'programmer' },
+                                       { name => 'Steve', job => 'soda jerk' },
+                                     ]
                    );
    print $template->output();
 
@@ -200,12 +199,12 @@ other ways are possible!):
 
    my @loop_data = ();  # initialize an array to hold your loop
 
-   for (my $x = 0; $x < 3; $x++) {
+   while (@words and @numbers) {
      my %row_data;  # get a fresh hash for the row data
 
      # fill in this row
-     $row_data{WORD} = $words[$x];
-     $row_data{NUMBER} = $numbers[$x];
+     $row_data{WORD} = shift @words;
+     $row_data{NUMBER} = shift @numbers;
  
      # the crucial step - push a reference to this row into the loop!
      push(@loop_data, \%row_data);
@@ -250,27 +249,28 @@ example of a param call with one nested loop:
 
 Basically, each <TMPL_LOOP> gets an array reference.  Inside the array
 are any number of hash references.  These hashes contain the
-name=>value pairs for a single pass over the loop template.  It is
-probably in your best interest to build these up programmatically, but
-that is up to you!
+name=>value pairs for a single pass over the loop template.  
 
 Inside a <TMPL_LOOP>, the only variables that are usable are the ones
 from the <TMPL_LOOP>.  The variables in the outer blocks are not
 visible within a template loop.  For the computer-science geeks among
-you, a <TMPL_LOOP> introduces a new scope much like a subroutine call.
+you, a <TMPL_LOOP> introduces a new scope much like a perl subroutine
+call.  Unlike perl, there are no global variables in the templates.
 
 =head2 <TMPL_INCLUDE NAME="filename.tmpl">
 
 This tag includes a template directly into the current template at the
-point where the tag is found.  The included template contents exactly
-as if its contents were physically included in the master template.
+point where the tag is found.  The included template contents are used
+exactly as if its contents were physically included in the master
+template.
 
 The file specified can be a full path - beginning with a '/'.  If it
 isn't a full path, the path to the enclosing file is tried first.
 After that the path in the environment variable HTML_TEMPLATE_ROOT is
-tried next.  Next, the "path" new() option is consulted.  As a final
-attempt, the filename is passed to open() directly.  See below for
-more information on HTML_TEMPLATE_ROOT and the "path" option to new().
+tried next, if it exists.  Next, the "path" new() option is consulted.
+As a final attempt, the filename is passed to open() directly.  See
+below for more information on HTML_TEMPLATE_ROOT and the "path" option
+to new().
 
 As a protection against infinitly recursive includes, an arbitary
 limit of 10 levels deep is imposed.  You can alter this limit with the
@@ -299,10 +299,22 @@ be included by output.
 construct - VARs and LOOPs and other IF/ELSE blocks.  Note, however,
 that intersecting a <TMPL_IF> and a <TMPL_LOOP> is invalid.
 
+   Not going to work:
    <TMPL_IF BOOL>
       <TMPL_LOOP SOME_LOOP>
    </TMPL_IF>
       </TMPL_LOOP>
+
+If the name of a TMPL_LOOP is used in a TMPL_IF, the IF block will
+output if the loop has at least one row.  Example:
+
+  <TMPL_IF LOOP_ONE>
+    This will output if the loop is not empty.
+  </TMPL_IF>
+
+  <TMPL_LOOP LOOP_ONE>
+    ....
+  </TMPL_LOOP>
 
 WARNING: Much of the benefit of HTML::Template is in decoupling your
 Perl and HTML.  If you introduce numerous cases where you have
@@ -339,6 +351,17 @@ CONTROL_PARAMETER is set false or not defined.  You can use
     Some text that is output only if BOOL is TRUE.
   </TMPL_UNLESS>
 
+If the name of a TMPL_LOOP is used in a TMPL_UNLESS, the UNLESS block
+output if the loop has zero rows.
+
+  <TMPL_UNLESS LOOP_ONE>
+    This will output if the loop is empty.
+  </TMPL_UNLESS>
+  
+  <TMPL_LOOP LOOP_ONE>
+    ....
+  </TMPL_LOOP>
+
 =cut
 
 =head1 Methods
@@ -367,11 +390,10 @@ and
                              );
 
 
-These initialize the template from in-memory resources.  These are
-mostly of use internally for the module - in almost every case you'll
-want to use the filename parameter.  If you're worried about all the
-disk access from a template file just use mod_perl and the cache
-option detailed below.
+These initialize the template from in-memory resources.  In almost
+every case you'll want to use the filename parameter.  If you're
+worried about all the disk access from reading a template file just
+use mod_perl and the cache option detailed below.
 
 The three new() calling methods can also be accessed as below, if you
 prefer.
@@ -428,12 +450,49 @@ file.  This only applies to templates opened with the filename
 parameter specified, not scalarref or arrayref templates.  Caching
 also looks at the modification times of any files included using
 <TMPL_INCLUDE> tags, but again, only if the template is opened with
-filename parameter.  Note that different new() parameter settings do
-not cause a cache refresh, only a change in the modification time of
-the template will trigger a cache refresh.  For most usages this is
-fine.  My simplistic testing shows that using cache yields a 90%
-performance increase under mod_perl, more if you use large
-<TMPL_LOOP>s.  Cache defaults to 0.
+filename parameter.  
+
+This is mainly of use in a persistent environment like
+Apache/mod_perl.  It has absolutely no benefit in a normal CGI
+environment since the script is unloaded from memory after every
+request.  For a cache that does work for normal CGIs see the
+'shared_cache' option below.
+
+Note that different new() parameter settings do not cause a cache
+refresh, only a change in the modification time of the template will
+trigger a cache refresh.  For most usages this is fine.  My simplistic
+testing shows that using cache yields a 90% performance increase under
+mod_perl.  Cache defaults to 0.
+
+=item *
+
+shared_cache - *EXPERIMENTAL* - if set to 1 the module will store its
+cache in shared memory using the IPC::ShareLite and Storable modules
+(available from CPAN).  The effect of this will be to maintain a
+single shared copy of each parsed template for all instances of
+HTML::Template to use.  This can be a significant reduction in memory
+usage in a multiple server environment.  As an example, on one of our
+systems we use 4MB of template cache and maintain 25 httpd processes -
+shared_cache results in saving almost 100MB!  Of course, some
+reduction in speed versus normal caching is to be expected.  Another
+difference between normal caching and shared_cache is that
+shared_cache will work in a CGI environment - normal caching is only
+useful in a persistent environment like Apache/mod_perl.
+
+By default HTML::Template uses the IPC key 'TMPL' as a shared root
+segment (0x4c504d54 in hex), but this can be changed by setting the
+'ipc_key' new() parameter to another 4-character or integer key.  
+
+On most unix systems you can examine the shared memory segments using
+'ipcs' and delete them with 'ipcrm'.  This can be necessary if for
+some reason the HTML::Template cache becomes corrupt.  I've included a
+small script in scripts/ called clean_shm.pl.  On my system this
+script deletes all shared memory segments accessible by the running
+user - sort of a "rm -rf /" for shared memory.  
+
+This option is currently *EXPERIMENTAL* - give it a try and tell me
+how it works out for you.  I'm particularily interested in reports of
+how it works under heavy-load and on non-Linux systems.
 
 =item *
 
@@ -442,6 +501,9 @@ caching but does not check to see if the file has changed on each
 request.  This option should be used with caution, but could be of use
 on high-load servers.  My tests show blind_cache performing only 1 to
 2 percent faster than cache under mod_perl.
+
+NOTE: Combining this option with shared_cache can result in stale
+templates stuck permanently in shared memory!
 
 =item *
 
@@ -475,9 +537,10 @@ considered obsolete.
 =item *
 
 loop_context_vars - when this parameter is set to true (it is false by
-default) three loop context varaiables are made available inside a
+default) three loop context variables are made available inside a
 loop: __FIRST__, __LAST__ and __INNER__.  They can be used with
-<TMPL_IF> and <TMPL_ELSE> to control how a loop is output.  Example:
+<TMPL_IF>, <TMPL_UNLESS> and <TMPL_ELSE> to control how a loop is
+output.  Example:
 
    <TMPL_LOOP NAME="FOO">
       <TMPL_IF NAME="__FIRST__">
@@ -493,7 +556,8 @@ loop: __FIRST__, __LAST__ and __INNER__.  They can be used with
       <TMPL_IF>
    </TMPL_LOOP>
 
-One use of this feature is to provide a "separator" similar in effect to the perl function join().  Example:
+One use of this feature is to provide a "separator" similar in effect
+to the perl function join().  Example:
 
    <TMPL_LOOP FRUIT>
       <TMPL_IF __LAST__> and </TMPL_IF>
@@ -525,6 +589,7 @@ Example:
                                                  '/alternate/path'
                                                ]
                                       );
+
 =item *
 
 max_includes - set this variable to determine the maximum depth that
@@ -535,9 +600,9 @@ to 0 to disable this protection.
 =item *
 
 vanguard_compatibility_mode - if set to 1 the module will expect to
-see <TMPL_VAR>s that look like %NAME% instead of the standard syntax.
-Also sets die_on_bad_params => 0.  If you're not at Vanguard Media
-trying to use an old format template don't worry about this one.
+see <TMPL_VAR>s that look like %NAME% in addition to the standard
+syntax.  Also sets die_on_bad_params => 0.  If you're not at Vanguard
+Media trying to use an old format template don't worry about this one.
 Defaults to 0.
 
 =item *
@@ -569,23 +634,23 @@ package HTML::Template::LOOP;
 use constant TEMPLATE_HASH => 0;
 use constant PARAM_SET => 1;
 
-package HTML::Template::IF;
+package HTML::Template::COND;
 use constant VARIABLE => 0;
-use constant JUMP_ADDRESS => 1;
-
-package HTML::Template::UNLESS;
-use constant VARIABLE => 0;
-use constant JUMP_ADDRESS => 1;
-
-package HTML::Template::ELSE;
-use constant VARIABLE => 0;
-use constant JUMP_ADDRESS => 1;
-use constant POLARITY => 2;
-use constant POLARITY_IF => 0;
-use constant POLARITY_UNLESS => 1;
+use constant VARIABLE_TYPE => 1;
+use constant VARIABLE_TYPE_VAR => 0;
+use constant VARIABLE_TYPE_LOOP => 1;
+use constant JUMP_IF_TRUE => 2;
+use constant JUMP_ADDRESS => 3;
+use constant WHICH => 4;
+use constant WHICH_IF => 0;
+use constant WHICH_UNLESS => 1;
 
 # back to the main package scope.
 package HTML::Template;
+
+use vars qw($NOOP $ESCAPE);
+$NOOP = HTML::Template::NOOP->new();
+$ESCAPE = HTML::Template::ESCAPE->new();
 
 # open a new template and return an object handle
 sub new {
@@ -610,7 +675,9 @@ sub new {
                path => [],
                strict => 1,
                loop_context_vars => 0,
-               max_includes => 10
+               max_includes => 10,
+               shared_cache => 0,
+               ipc_key => 'TMPL',
               );
   
   # load in options supplied to new()
@@ -621,6 +688,9 @@ sub new {
 
   # blind_cache = 1 implies cache = 1
   $options->{blind_cache} and $options->{cache} = 1;
+
+  # shared_cache = 1 implies cache = 1
+  $options->{shared_cache} and $options->{cache} = 1;
 
   # vanguard_compatibility_mode implies die_on_bad_params = 0
   $options->{vanguard_compatibility_mode} and 
@@ -664,6 +734,36 @@ sub new {
     die "HTML::Template->new called with multiple (or no) template sources specified!  A valid call to new() has exactly one filename => 'file' OR exactly one scalarRef => \\\$scalar OR exactly one arrayRef => \\\@array";    
   }
 
+  if ($options->{shared_cache}) {
+    # shared_cache needs some extra modules loaded
+    eval {
+      require 'Storable.pm';
+    };
+    die "Could not load Storable.  You must have Storable installed to use HTML::Template in shared_cache mode.  The error was: $@"
+      if ($@);
+    
+    eval {
+      require 'IPC/ShareLite.pm';
+    };
+    die "Could not load IPC::ShareLite.  You must have IPC::ShareLite installed to use HTML::Template in shared_cache mode.  The error was: $@"
+      if ($@);
+    
+    # dynamically patch IPC::ShareLite version 0.05.  Later versions
+    # will include a patch necessary to avoid a segfault on the first
+    # cache load.  This is some pretty rude behavior but this patch
+    # has been accepted by Maurice Aubrey for the next version of
+    # IPC::ShareLite (0.06?).  I'll remove this and directly check for
+    # the new version when it is released.
+    if ($IPC::ShareLite::VERSION == 0.05) {
+      *IPC::ShareLite::DESTROY = sub {
+        my $self = shift;
+        
+        destroy_share( $self->{share}, $self->{destroy} )
+          unless ($self->{share} == 0);
+      }
+    }
+  }
+  
   # initialize data structures
   $self->_init;
   
@@ -715,114 +815,322 @@ sub new_scalar_ref {
   my $pkg = shift; return $pkg->new('scalarref', @_);
 }
 
-# initializes all the object data structures.  Also handles global
-# caching of template parse data.
-use vars qw( %CACHE );
+# initializes all the object data structures, either from cache or by
+# calling the appropriate routines.
 sub _init {
   my $self = shift;
   my $options = $self->{options};
 
-  # look in the cache to see if we have a cached copy of this
-  # template, note modification time in $mtime if we do.
-  my $mtime;
-  if ($options->{cache} and 
-      exists($options->{filename}) and 
-      exists($CACHE{$options->{filename}})) {
-    # the cache contains an entry for this filename
-    
-    if (!$options->{blind_cache}) {
-      # make sure it still exists in the filesystem 
-      (-r $options->{filename}) or die("HTML::Template : template file $options->{filename} does not exist or is unreadable.");    
-
-      # get the modification time
-      $mtime = (stat($options->{filename}))[9];
-      $options->{debug} and 
-        print STDERR "### HTML::Template Debug ### Modify time of $mtime for ",  $options->{filename}, "\n";
-      
-      # if the modification time has changed remove the cache entry and
-      # re-call $self->_init
-      if (defined($CACHE{$options->{filename}}{mtime}) and 
-          ($mtime != $CACHE{$options->{filename}}{mtime})) {
-        delete($CACHE{$options->{filename}});
-        
-        $options->{cache_debug} and 
-          print STDERR "CACHE MISS : $options->{filename} : $mtime\n";
-        
-        return $self->_init;
-      }
-
-      # if the template has includes, check each included file's mtime
-      # and re-call $self->_init if different.  
-      if (exists($CACHE{$options->{filename}}{included_mtimes})) {
-        foreach my $filename (keys %{$CACHE{$options->{filename}}{included_mtimes}}) {
-          defined($CACHE{$options->{filename}}{included_mtimes}{$filename}) or
-            next;
-          my $included_mtime = (stat($filename))[9];
-          if ($included_mtime != $CACHE{$options->{filename}}{included_mtimes}{$filename}) {
-            delete($CACHE{$options->{filename}});
-            $options->{cache_debug} and 
-              print STDERR "### HTML::Template Cache Debug ### CACHE MISS : $options->{filename} : INCLUDE $filename : $included_mtime\n";
-            
-            return $self->_init;
-          }
-        }
-      }
+  # try the cache
+  if ($options->{cache}) { 
+    if (!$options->{shared_cache}) {
+      $self->_fetch_from_cache();
+    } else {
+      $self->_fetch_from_shared_cache();
     }
-
-    # else, use the cached values instead of calling _init_template
-    # and _parse.
-    
-    $options->{cache_debug} and print STDERR "### HTML::Template Cache Debug ### CACHE HIT : $options->{filename}\n";
-    
-    $self->{param_map} = $CACHE{$options->{filename}}{param_map};
-    $self->{parse_stack} = $CACHE{$options->{filename}}{parse_stack};
-    exists($CACHE{$options->{filename}}{included_mtimes}) and
-      $self->{included_mtimes} = $CACHE{$options->{filename}}{included_mtimes};
-    
-    # the HTML::Template::LOOP HTML::Template objects may have stale
-    # options hashes.  It's necessary to update them now.  An
-    # alternative to this solution would be to do an Apache::DBI and
-    # require that new() options determine cache validity.
-    my @pstacks = ($self->{parse_stack});
-    while(@pstacks) {
-      my $pstack = pop(@pstacks);
-      foreach my $item (@$pstack) {
-        next unless (ref($item) eq 'HTML::Template::LOOP');
-        foreach my $template (values %{$item->[HTML::Template::LOOP::TEMPLATE_HASH]}) {
-          # must be the same list as the call to _new_from_loop...
-          $template->{options}{debug} = $options->{debug};
-          $template->{options}{debug_stack} = $options->{debug_stack};
-          $template->{options}{die_on_bad_params} = $options->{die_on_bad_params};
-          push(@pstacks, $template->{parse_stack});
-        }
-      }
-    }
-
-    # clear out values from param_map from last run
-    $self->clear_params();
-
-    return $self;
-  } 
-
-  # init the template and parse data
-  $self->_init_template;
-  $self->_parse;
-
-  # if we're caching, cache the results of _init_template and _parse
-  # for future use
-  if ($options->{cache} and exists($options->{filename})) {
-    $options->{cache_debug} and print STDERR "### HTML::Template Cache Debug ### CACHE LOAD : $options->{filename}\n";
-    
-    $options->{blind_cache} or
-      $CACHE{$options->{filename}}{mtime} = (stat($options->{filename}))[9];
-    $CACHE{$options->{filename}}{param_map} = $self->{param_map};
-    $CACHE{$options->{filename}}{parse_stack} = $self->{parse_stack};
-    exists($self->{included_mtimes}) and
-      $CACHE{$options->{filename}}{included_mtimes} = $self->{included_mtimes};
+    return if (defined $self->{param_map} and defined $self->{parse_stack});
   }
-  
-  return $self;
+
+  # if we're here, then we didn't get a cached copy, so do a full
+  # init.
+  $self->_init_template();
+  $self->_parse();
+
+  # now that we have a full init, cache the structures if cacheing is
+  # on.
+  if ($options->{cache}) { 
+    if (!$options->{shared_cache}) {
+      $self->_commit_to_cache();
+    } else {
+      $self->_commit_to_shared_cache();
+    }
+  }
 }
+
+# Caching subroutines - they handle getting and validating cache
+# records from either the in-memory or shared caches.
+
+# handles the normal in memory cache
+use vars qw( %CACHE );
+sub _fetch_from_cache {
+  my $self = shift;
+  my $options = $self->{options};
+  
+  # return if there's no cache entry for this filename
+  return unless (exists $options->{filename} and
+                 exists $CACHE{$options->{filename}});
+  
+  # validate the cache
+  my $mtime = $self->_mtime();  
+  if (defined $mtime) {
+    # return if the mtime doesn't match the cache
+    if (defined($CACHE{$options->{filename}}{mtime}) and 
+        ($mtime != $CACHE{$options->{filename}}{mtime})) {
+      $options->{cache_debug} and 
+        print STDERR "CACHE MISS : $options->{filename} : $mtime\n";
+      return;
+    }
+
+    # if the template has includes, check each included file's mtime
+    # and return if different
+    if (exists($CACHE{$options->{filename}}{included_mtimes})) {
+      foreach my $filename (keys %{$CACHE{$options->{filename}}{included_mtimes}}) {
+        next unless 
+          defined($CACHE{$options->{filename}}{included_mtimes}{$filename});
+        
+        my $included_mtime = (stat($filename))[9];
+        if ($included_mtime != $CACHE{$options->{filename}}{included_mtimes}{$filename}) {
+          $options->{cache_debug} and 
+            print STDERR "### HTML::Template Cache Debug ### CACHE MISS : $options->{filename} : INCLUDE $filename : $included_mtime\n";
+          
+          return;
+        }
+      }
+    }
+  }
+
+  # got a cache hit!
+  
+  $options->{cache_debug} and print STDERR "### HTML::Template Cache Debug ### CACHE HIT : $options->{filename}\n";
+      
+  $self->{param_map} = $CACHE{$options->{filename}}{param_map};
+  $self->{parse_stack} = $CACHE{$options->{filename}}{parse_stack};
+  exists($CACHE{$options->{filename}}{included_mtimes}) and
+    $self->{included_mtimes} = $CACHE{$options->{filename}}{included_mtimes};
+
+  # clear out values from param_map from last run
+  $self->_normalize_options();
+  $self->clear_params();
+}
+
+sub _commit_to_cache {
+  my $self = shift;
+  my $options = $self->{options};
+
+  $options->{cache_debug} and print STDERR "### HTML::Template Cache Debug ### CACHE LOAD : $options->{filename}\n";
+    
+  $options->{blind_cache} or
+    $CACHE{$options->{filename}}{mtime} = $self->_mtime;
+  $CACHE{$options->{filename}}{param_map} = $self->{param_map};
+  $CACHE{$options->{filename}}{parse_stack} = $self->{parse_stack};
+  exists($self->{included_mtimes}) and
+    $CACHE{$options->{filename}}{included_mtimes} = $self->{included_mtimes};
+}
+
+# Shared cache routines.
+use vars qw( $ROOT_SHARE %SHARE_CACHE );
+sub _fetch_from_shared_cache {
+  my $self = shift;
+  my $options = $self->{options};
+  my $filename = $options->{filename};
+
+  return unless (exists $options->{filename});
+
+  # get template cache share object
+  my $share = $SHARE_CACHE{$filename};
+  if (not defined $share) {
+    # do ROOT_CACHE initialization if needed
+    if (not defined $ROOT_SHARE) {
+      $ROOT_SHARE = IPC::ShareLite->new('-key' => $options->{ipc_key},
+                                        '-create' => 0, '-destroy' => 0);
+      if (not defined $ROOT_SHARE) {
+        # try to create it if that didn't work
+        $ROOT_SHARE = IPC::ShareLite->new('-key' => $options->{ipc_key},
+                                          '-create' => 1,'-exclusive' => 1,
+                                          '-destroy' => 0);
+        defined($ROOT_SHARE) or die "HTML::Template->new : Unable to initialize root IPC shared memory block (shared_cache => 1) : $!";
+        $ROOT_SHARE->store(Storable::freeze({}));
+        $options->{cache_debug} and 
+          print STDERR "### HTML::Template Cache Debug ### SHARED CACHE ROOT INIT\n";
+      }
+    }
+
+    # get root cache map inside a shared lock
+    $ROOT_SHARE->lock(IPC::ShareLite::LOCK_SH());
+    my $root_block = $ROOT_SHARE->fetch();
+    $ROOT_SHARE->unlock();
+    die "HTML::Template->new : Unable to get IPC root cache (shared_cache => 1) : $!"
+      unless defined($root_block);
+
+    # see if we've got an entry for this template file, return if not
+    my $root_cache = Storable::thaw($root_block);   
+    my $key = $root_cache->{$filename};
+    return unless (defined $key);
+
+    # we've got a key, get the share and cache it
+    $share = IPC::ShareLite->new('-key'=>$key,'-create'=>0,'-destroy'=>0);
+    die "HTML::Template->new : Unable to get shared cache block $key : $!"
+      unless defined($share);
+    $SHARE_CACHE{$filename} = $share;
+  }
+
+  # get the template cache
+  my $template_cache_block = $share->fetch();
+  die "HTML::Template->new : Unable to get IPC template cache (shared_cache => 1) : $!"
+    unless defined($template_cache_block);
+
+  # pull out template data
+  my $template_cache = Storable::thaw($template_cache_block);
+  my ($c_mtime, $included_mtimes, $param_map, $parse_stack) 
+    = @$template_cache;
+
+  # if the modification time has changed return
+  my $mtime = $self->_mtime();
+  if (defined $mtime and defined $c_mtime
+      and $mtime != $c_mtime) {
+    $options->{cache_debug} and 
+      print STDERR "### HTML::Template Cache Debug ### SHARED CACHE MISS : $filename : $mtime\n";
+    return;
+  }
+
+  # if the template has includes, check each included file's mtime
+  # and return if different
+  if (defined $mtime and defined $included_mtimes) {
+    foreach my $fname (keys %$included_mtimes) {
+      next unless defined($included_mtimes->{$fname});
+      if ($included_mtimes->{$fname} != (stat($fname))[9]) {
+        $options->{cache_debug} and 
+          print STDERR "### HTML::Template Cache Debug ### SHARED CACHE MISS : $filename : INCLUDE $fname\n";
+        return;
+      }
+    }
+  }
+
+  # all done - got the cache template.
+  $options->{cache_debug} and 
+    print STDERR "### HTML::Template Cache Debug ### SHARED CACHE HIT : $filename\n";
+  
+  $self->{param_map} = $param_map;
+  $self->{parse_stack} = $parse_stack;
+  $self->{included_mtimes} = $included_mtimes;
+  $self->_normalize_options();
+  return;
+}
+
+use vars qw( $LAST_KEY );
+sub _commit_to_shared_cache {
+  my $self = shift;
+  my $options = $self->{options};
+  my $filename = $options->{filename};
+  
+  $options->{cache_debug} and print STDERR "### HTML::Template Cache Debug ### SHARED CACHE LOAD : $options->{filename}\n";
+
+  # check for an impossibility, just to make me feel better.  This is
+  # done in _fetch_from_shared_cache...
+  defined($ROOT_SHARE) or die "HTML::Template->new : Uninitialized root IPC shared memory block in commit (shared_cache => 1) : $!";
+
+  # one way or another, this is going into the template cache 
+  my $cache_block = Storable::freeze([$self->{mtime},
+                                      $self->{included_mtimes},
+                                      $self->{param_map}, 
+                                      $self->{parse_stack}]);    
+
+  # try to get template cache share object from the cache
+  if (exists $SHARE_CACHE{$filename}) {
+    # store the share to the existing cache block.  This may overwrite
+    # an already-written up-to-date cache, but to find out we'd have
+    # to incure the penalty of fetching AND thawing inside an exlusive
+    # lock!     
+    $SHARE_CACHE{$filename}->store($cache_block);
+    return;
+  }
+
+  # we don't have a key for the cache - we'll now try to get one and
+  # failing that allocate a new block.  This is all done within a big
+  # exclusive lock on the root.  It's possible a more permisve locking
+  # strategy could be developed, but this one is at least correct.  I
+  # haven't been able to come up with a better one that didn't leave
+  # some possibility of shared-memory blocks leaking in a root
+  # overwrite.
+  $ROOT_SHARE->lock();
+
+  my $root_block = $ROOT_SHARE->fetch();
+  $ROOT_SHARE->unlock(), die "HTML::Template->new : Unable to get IPC root cache (shared_cache => 1) : $!"
+    unless defined($root_block);
+
+  # see if we've got an entry for this template file, if we do, use it.
+  my $root_record = Storable::thaw($root_block);   
+  my $key = $root_record->{$filename};
+  if (defined $key) {
+    # we've got a key, get the share and cache it (we could unlock the
+    # ROOT_CACHE now, but any lockers waiting for this share key would
+    # then get the old share and recommit - holding it a bit longer
+    # gains assurance this won't be the case)
+    my $share = IPC::ShareLite->new('-key'=>$key,'-create'=>0,'-destroy'=>0);
+    die "HTML::Template->new : Unable to get shared cache block $key (shared_cache => 1) : $!"
+      unless defined($share);
+    $SHARE_CACHE{$filename} = $share;
+    $share->store($cache_block);
+    $ROOT_SHARE->unlock();
+    return;
+  }
+
+  # we need to get a new shared block and update the root cache.
+  # first, allocate the new shared block
+
+  # try up to 500 consecutive keys.  Why 500?  Why not?  This should
+  # probably by configurable if I could think of a name that wasn't
+  # ten words long like how_many_ipc_keys_to_check_for_empty_blocks.
+  $key = $LAST_KEY || 1;
+  my $to = $key + 500; 
+
+  my $share;
+  for (;$key < $to;$key++) {
+    $share = IPC::ShareLite->new('-key' => $key,
+                                 '-create' => 1,
+                                 '-exclusive' => 1,
+                                 '-destroy' => 0,
+                                );
+    last if defined($share);
+  }
+  $ROOT_SHARE->unlock(), die "HTML::Template->new : Unable to get shared cache block (shared_cache => 1) : $!"
+    unless defined($share);
+
+  $options->{cache_debug} and print STDERR "### HTML::Template Cache Debug ### : SHARED CACHE ALLOC : $filename : $key\n";
+  $share->store($cache_block);
+  $root_record->{$filename} = $key;
+  $ROOT_SHARE->store(Storable::freeze($root_record));
+  $ROOT_SHARE->unlock();
+
+  $LAST_KEY = $key;
+  return;
+}
+
+# utility function - computes the mtime for $options->{filename}
+sub _mtime {
+  my $self = shift;
+  my $options = $self->{options};
+  
+  return(undef) if ($options->{blind_cache});
+
+  # make sure it still exists in the filesystem 
+  (-r $options->{filename}) or die("HTML::Template : template file $options->{filename} does not exist or is unreadable.");    
+  
+  # get the modification time
+  return (stat($options->{filename}))[9];
+}
+
+# utility function - enforces new() options across LOOPs that have
+# come from a cache.  Otherwise they would have stale options hashes.
+sub _normalize_options {
+  my $self = shift;
+  my $options = $self->{options};
+
+  my @pstacks = ($self->{parse_stack});
+  while(@pstacks) {
+    my $pstack = pop(@pstacks);
+    foreach my $item (@$pstack) {
+      next unless (ref($item) eq 'HTML::Template::LOOP');
+      foreach my $template (values %{$item->[HTML::Template::LOOP::TEMPLATE_HASH]}) {
+        # must be the same list as the call to _new_from_loop...
+        $template->{options}{debug} = $options->{debug};
+        $template->{options}{debug_stack} = $options->{debug_stack};
+        $template->{options}{die_on_bad_params} = $options->{die_on_bad_params};
+        push(@pstacks, $template->{parse_stack});
+      }
+    }
+  }
+}      
 
 # initialize the template buffer
 sub _init_template {
@@ -868,7 +1176,8 @@ sub _init_template {
     # we'll need this for future reference - to call stat() for example.
     $options->{filename} = $filepath;
     
-    # read into the array
+    # read into the array, note the mtime for the record
+    $self->{mtime} = $self->_mtime;
     my @templateArray = <TEMPLATE>;
     close(TEMPLATE);
     
@@ -911,8 +1220,8 @@ sub _parse {
   # setup the stacks and maps - they're accessed by typeglobs that
   # reference the top of the stack.  They are masked so that a loop
   # can transparently have its own versions.
-  use vars qw(@pstack %pmap @ifstack);
-  local (*pstack, *ifstack, *pmap);
+  use vars qw(@pstack %pmap @ifstack @ucstack);
+  local (*pstack, *ifstack, *pmap, *ucstack);
   
   # the pstack is the array of scalar refs (plain text from the
   # template file), VARs, LOOPs, IFs and ELSEs that output() works on
@@ -934,6 +1243,14 @@ sub _parse {
   my @ifstacks = ([]);
   *ifstack = $ifstacks[0];
 
+  # the ucstack is a temporary stack containing conditions that need
+  # to be bound to param_map entries when their block is finished.
+  # This happens when a conditional is encountered before any other
+  # reference to its NAME.  Since a conditional can reference VARs and
+  # LOOPs it isn't possible to make the link right away.
+  my @ucstacks = ([]);
+  *ucstack = $ucstacks[0];
+  
   # the loopstack is another temp stack for closing loops.  unlike
   # those above it doesn't get scoped inside loops, therefore it
   # doesn't need the typeglob magic.
@@ -1154,6 +1471,8 @@ sub _parse {
           *pmap = $pmaps[$#pmaps];
           push(@ifstacks, []);
           *ifstack = $ifstacks[$#ifstacks];
+          push(@ucstacks, []);
+          *ucstack = $ucstacks[$#ucstacks];
 
           # auto-vivify __FIRST__, __LAST__ and __INNER__ if
           # loop_context_vars is set.  Otherwise, with
@@ -1185,6 +1504,22 @@ sub _parse {
             push(@pstack, \$pre);
           }
 
+          # resolve pending conditionals
+          foreach my $uc (@ucstack) {
+            my $var = $uc->[HTML::Template::COND::VARIABLE]; 
+            if (exists($pmap{$var})) {
+              $uc->[HTML::Template::COND::VARIABLE] = $pmap{$var};
+            } else {
+              $pmap{$var} = HTML::Template::VAR->new();
+              $uc->[HTML::Template::COND::VARIABLE] = $pmap{$var};
+            }
+            if (ref($pmap{$var}) eq 'HTML::Template::VAR') {
+              $uc->[HTML::Template::COND::VARIABLE_TYPE] = HTML::Template::COND::VARIABLE_TYPE_VAR;
+            } else {
+              $uc->[HTML::Template::COND::VARIABLE_TYPE] = HTML::Template::COND::VARIABLE_TYPE_LOOP;
+            }
+          }
+
           # get pmap and pstack for the loop, adjust the typeglobs to
           # the enclosing block.
           my $param_map = pop(@pmaps);
@@ -1194,7 +1529,9 @@ sub _parse {
           
           scalar(@ifstack) and die "HTML::Template->new() : Dangling <TMPL_IF> or <TMPL_UNLESS> in loop ending at $fname : line $fcounter.";
           pop(@ifstacks);
-          *ifstack = $ifstacks[$#ifstack];
+          *ifstack = $ifstacks[$#ifstacks];
+          pop(@ucstacks);
+          *ucstack = $ucstacks[$#ucstacks];
           
           # instantiate the sub-Template, feeding it parse_stack and
           # param_map.  This means that only the enclosing template
@@ -1213,23 +1550,39 @@ sub _parse {
           $line = $post;
           next PASS;
           
-        } elsif ($which eq 'TMPL_IF') {
-          $options->{debug} and print STDERR "### HTML::Template Debug ### $fname : line $fcounter : IF $name start\n";
+        } elsif ($which eq 'TMPL_IF' or $which eq 'TMPL_UNLESS' ) {
+          $options->{debug} and print STDERR "### HTML::Template Debug ### $fname : line $fcounter : $which $name start\n";
 
           # if we already have this var, then simply link to the existing
-          # HTML::Template::VAR, else create a new one.        
+          # HTML::Template::VAR/LOOP, else defer the mapping
           my $var;        
           if (exists $pmap{$name}) {
             $var = $pmap{$name};
-            (ref($var) eq 'HTML::Template::VAR') or
-              die "HTML::Template->new() : Already used param name $name as a TMPL_LOOP, found in a TMPL_IF at $fname : line $fcounter!";
           } else {
-            $var = HTML::Template::VAR->new();
-            $pmap{$name} = $var;
+            $var = $name;
           }
 
-          # connect the var to an if
-          my $if = HTML::Template::IF->new($var);
+          # connect the var to a conditional
+          my $cond = HTML::Template::COND->new($var);
+          if ($which eq 'TMPL_IF') {
+            $cond->[HTML::Template::COND::WHICH] = HTML::Template::COND::WHICH_IF;
+            $cond->[HTML::Template::COND::JUMP_IF_TRUE] = 0;
+          } else {
+            $cond->[HTML::Template::COND::WHICH] = HTML::Template::COND::WHICH_UNLESS;
+            $cond->[HTML::Template::COND::JUMP_IF_TRUE] = 1;
+          }
+
+          # push unconnected conditionals onto the ucstack for
+          # resolution later.  Otherwise, save type information now.
+          if ($var eq $name) {
+            push(@ucstack, $cond);
+          } else {
+            if (ref($var) eq 'HTML::Template::VAR') {
+              $cond->[HTML::Template::COND::VARIABLE_TYPE] = HTML::Template::COND::VARIABLE_TYPE_VAR;
+            } else {
+              $cond->[HTML::Template::COND::VARIABLE_TYPE] = HTML::Template::COND::VARIABLE_TYPE_LOOP;
+            }
+          }
 
           # push text coming before the tag onto the pstack,
           # concatenating with preceding text if possible.
@@ -1240,54 +1593,24 @@ sub _parse {
           }
 
           # push what we've got onto the stacks
-          push(@pstack, $if);
-          push(@ifstack, $if);
+          push(@pstack, $cond);
+          push(@ifstack, $cond);
 
           $line = $post;
           next PASS;
 
-        } elsif ($which eq 'TMPL_UNLESS') {
-          $options->{debug} and print STDERR "### HTML::Template Debug ### $fname : line $fcounter : UNLESS $name start\n";
+        } elsif ($which eq '/TMPL_IF' or $which eq '/TMPL_UNLESS') {
+          $options->{debug} and print STDERR "### HTML::Template Debug ###$fname : line $fcounter : $which end\n";
 
-          # if we already have this var, then simply link to the existing
-          # HTML::Template::VAR, else create a new one.        
-          my $var;        
-          if (exists $pmap{$name}) {
-            $var = $pmap{$name};
-            (ref($var) eq 'HTML::Template::VAR') or
-              die "HTML::Template->new() : Already used param name $name as a TMPL_LOOP, found in a TMPL_UNLESS at $fname : line $fcounter!";
+          my $cond = pop(@ifstack);
+          die "HTML::Template->new() : found </${which}> with no matching <TMPL_IF> at $fname : line $fcounter." unless defined $cond;
+          if ($which eq '/TMPL_IF') {
+            die "HTML::Template->new() : found </TMPL_IF> incorrectly terminating a <TMPL_UNLESS> (use </TMPL_UNLESS>) at $fname : line $fcounter.\n" 
+              if ($cond->[HTML::Template::COND::WHICH] == HTML::Template::COND::WHICH_UNLESS);
           } else {
-            $var = HTML::Template::VAR->new();
-            $pmap{$name} = $var;
+            die "HTML::Template->new() : found </TMPL_UNLESS> incorrectly terminating a <TMPL_IF> (use </TMPL_IF>) at $fname : line $fcounter.\n" 
+              if ($cond->[HTML::Template::COND::WHICH] == HTML::Template::COND::WHICH_IF);
           }
-
-          # connect the var to an unless op
-          my $unless = HTML::Template::UNLESS->new($var);
-
-          # push text coming before the tag onto the pstack,
-          # concatenating with preceding text if possible.
-          if (ref($pstack[$#pstack]) eq 'SCALAR') {
-            ${$pstack[$#pstack]} .= $pre;
-          } else {
-            push(@pstack, \$pre);
-          }
-
-          # push what we've got onto the stacks
-          push(@pstack, $unless);
-          push(@ifstack, $unless);
-
-          $line = $post;
-          next PASS;
-
-        } elsif ($which eq '/TMPL_IF') {
-          $options->{debug} and print STDERR "### HTML::Template Debug ###$fname : line $fcounter : IF end\n";
-
-          my $if = pop(@ifstack);
-          die "HTML::Template->new() : found </TMPL_IF> with no matching <TMPL_IF> at $fname : line $fcounter." unless defined $if;
-          die "HTML::Template->new() : found </TMPL_IF> incorrectly terminating a <TMPL_UNLESS> (use </TMPL_UNLESS>) at $fname : line $fcounter.\n" 
-            if ((ref($if) eq 'HTML::Template::UNLESS') or
-                ((ref($if) eq 'HTML::Template::ELSE') and
-                 ($if->[HTML::Template::ELSE::POLARITY] == HTML::Template::ELSE::POLARITY_UNLESS)));
 
           # push text coming before the tag onto the pstack,
           # concatenating with preceding text if possible.
@@ -1300,36 +1623,8 @@ sub _parse {
           # connect the matching to this "address" - place a NOOP to
           # hold the spot.  This allows output() to treat an IF in the
           # assembler-esque "Conditional Jump" mode.
-          push(@pstack, HTML::Template::NOOP->new());
-          $if->[HTML::Template::IF::JUMP_ADDRESS] = $#pstack;
-          
-          # next line
-          $line = $post;
-          next PASS;
-
-        } elsif ($which eq '/TMPL_UNLESS') {
-          $options->{debug} and print STDERR "### HTML::Template Debug ###$fname : line $fcounter : UNLESS end\n";
-
-          my $unless = pop(@ifstack);
-          die "HTML::Template->new() : found </TMPL_UNLESS> with no matching <TMPL_UNLESS> at $fname : line $fcounter!" unless defined $unless;
-          die "HTML::Template->new() : found </TMPL_UNLESS> incorrectly terminating a <TMPL_IF> (use </TMPL_IF>) at $fname : line $fcounter.\n" 
-            if ((ref($unless) eq 'HTML::Template::IF') or
-                ((ref($unless) eq 'HTML::Template::ELSE') and
-                 ($unless->[HTML::Template::ELSE::POLARITY] == HTML::Template::ELSE::POLARITY_IF)));
-
-          # push text coming before the tag onto the pstack,
-          # concatenating with preceding text if possible.
-          if (ref($pstack[$#pstack]) eq 'SCALAR') {
-            ${$pstack[$#pstack]} .= $pre;
-          } else {
-            push(@pstack, \$pre);
-          }
-
-          # connect the matching unless to this "address" - place a
-          # NOOP to hold the spot.  This allows output() to treat an
-          # UNLESS in the assembler-esque "Conditional Jump" mode.
-          push(@pstack, HTML::Template::NOOP->new());
-          $unless->[HTML::Template::UNLESS::JUMP_ADDRESS] = $#pstack;
+          push(@pstack, $NOOP);
+          $cond->[HTML::Template::COND::JUMP_ADDRESS] = $#pstack;
           
           # next line
           $line = $post;
@@ -1338,15 +1633,19 @@ sub _parse {
         } elsif ($which eq 'TMPL_ELSE') {
           $options->{debug} and print STDERR "### HTML::Template Debug ### $fname : line $fcounter : ELSE\n";
 
-          my $if = pop(@ifstack);
-          die "HTML::Template->new() : found <TMPL_ELSE> with no matching <TMPL_IF> or <TMPL_UNLESS> at $fname : line $fcounter." unless defined $if;
+          my $cond = pop(@ifstack);
+          die "HTML::Template->new() : found <TMPL_ELSE> with no matching <TMPL_IF> or <TMPL_UNLESS> at $fname : line $fcounter." unless defined $cond;
           
           
-          my $else;
-          if (ref($if) eq 'HTML::Template::IF') {
-            $else = HTML::Template::ELSE->new($if->[HTML::Template::IF::VARIABLE], HTML::Template::ELSE::POLARITY_IF);
+          my $else = HTML::Template::COND->new($cond->[HTML::Template::COND::VARIABLE]);
+          $else->[HTML::Template::COND::WHICH] = $cond->[HTML::Template::COND::WHICH];
+          $else->[HTML::Template::COND::JUMP_IF_TRUE] = not $cond->[HTML::Template::COND::JUMP_IF_TRUE];
+          
+          # need end-block resolution?
+          if (defined($cond->[HTML::Template::COND::VARIABLE_TYPE])) {
+            $else->[HTML::Template::COND::VARIABLE_TYPE] = $cond->[HTML::Template::COND::VARIABLE_TYPE];
           } else {
-            $else = HTML::Template::ELSE->new($if->[HTML::Template::IF::VARIABLE], HTML::Template::ELSE::POLARITY_UNLESS);
+            push(@ucstack, $else);
           }
 
           # push text coming before the tag onto the pstack,
@@ -1364,7 +1663,7 @@ sub _parse {
           # elaborated, and of course succeeds.  On the other hand, if
           # the IF fails and falls though, output will reach the else
           # and jump to the /if address.
-          $if->[HTML::Template::IF::JUMP_ADDRESS] = $#pstack;
+          $cond->[HTML::Template::COND::JUMP_ADDRESS] = $#pstack;
 
           $line = $post;
           next PASS;
@@ -1483,6 +1782,23 @@ sub _parse {
   scalar(@ifstack) and die "HTML::Template->new() : At least one <TMPL_IF> or <TMPL_UNLESS> not terminated at end of file!";
   scalar(@loopstack) and die "HTML::Template->new() : At least one <TMPL_LOOP> not terminated at end of file!";
 
+  # resolve pending conditionals
+  foreach my $uc (@ucstack) {
+    my $var = $uc->[HTML::Template::COND::VARIABLE]; 
+    if (exists($pmap{$var})) {
+      $uc->[HTML::Template::COND::VARIABLE] = $pmap{$var};
+    } else {
+      $pmap{$var} = HTML::Template::VAR->new();
+      $uc->[HTML::Template::COND::VARIABLE] = $pmap{$var};
+    }
+    if (ref($pmap{$var}) eq 'HTML::Template::VAR') {
+      $uc->[HTML::Template::COND::VARIABLE_TYPE] = HTML::Template::COND::VARIABLE_TYPE_VAR;
+    } else {
+      $uc->[HTML::Template::COND::VARIABLE_TYPE] = HTML::Template::COND::VARIABLE_TYPE_LOOP;
+    }
+  }
+              
+
   # want a stack dump?
   if ($options->{debug_stack}) {
     require 'Data/Dumper.pm';
@@ -1576,7 +1892,7 @@ sub param {
   my $param_map = $self->{param_map};
 
   # the no-parameter case - return list of parameters in the template.
-  return keys(%{$param_map}) unless scalar(@_);
+  return keys(%$param_map) unless scalar(@_);
   
   my $first = shift;
   my $type = ref $first;
@@ -1593,30 +1909,29 @@ sub param {
     return undef unless (exists($param_map->{$param}) and
                          defined($param_map->{$param}));
 
-    $type = ref($param_map->{$param});
-    ($type eq 'HTML::Template::VAR') and
-      return ${$param_map->{$param}};
-    ($type eq 'HTML::Template::LOOP') and
-      return $param_map->{$param}[HTML::Template::LOOP::PARAM_SET];
-    die "Unknown param type $type!";
+    return ${$param_map->{$param}} if 
+      (ref($param_map->{$param}) eq 'HTML::Template::VAR');
+    return $param_map->{$param}[HTML::Template::LOOP::PARAM_SET];
   } 
 
   if (!scalar(@_)) {
     die "HTML::Template->param() : Single reference arg to param() must be a hash-ref!  You gave me a $type." 
       unless $type eq 'HASH';  
-    push(@_, %{$first});
+    push(@_, %$first);
   } else {
     unshift(@_, $first);
-
   }
   
-  die "HTML::Template->param() : You gave me an odd number of parameters to param()!  Read the docs, man." 
+  die "HTML::Template->param() : You gave me an odd number of parameters to param()!"
     unless ((@_ % 2) == 0);
 
+  # strangely, changing this to a "while(@_) { shift, shift }" type
+  # loop causes perl 5.004_04 to die with some nonsense about a
+  # read-only value.
   for (my $x = 0; $x <= $#_; $x += 2) {
     my $param = lc $_[$x];
     my $value = $_[($x + 1)];
-
+    
     # check that this param exists in the template
     $options->{die_on_bad_params} and !exists($param_map->{$param}) and
       die("HTML::Template : Attempt to set nonexistent parameter $param : (die_on_bad_params => 1)");
@@ -1637,7 +1952,6 @@ sub param {
       ${$param_map->{$param}} = $value;
     }
   }
-  return 1;
 }
 
 =head2 clear_params()
@@ -1704,11 +2018,11 @@ sub output {
   # attempting to fill them from the associated objects.
   if (scalar(@{$options->{associate}})) {
     foreach my $param (keys %{$self->{param_map}}) {
-      if (!defined($self->{param_map}->{$param}->param())) {
+      if (!defined($self->param($param))) {
       OBJ: foreach my $associated_object (@{$options->{associate}}) {
           my $value = $associated_object->param($param);          
           if (defined($value)) {
-            $self->{param_map}->{$param}->param($value);
+            $self->param($param, $value);
             last OBJ;
           }
         }
@@ -1734,23 +2048,27 @@ sub output {
     } elsif ($type eq 'HTML::Template::LOOP') {
       defined($line->[HTML::Template::LOOP::PARAM_SET]) and 
         $result .= $line->output($x, $options->{loop_context_vars});
-    } elsif ($type eq 'HTML::Template::IF') {
-      $x = $line->[HTML::Template::IF::JUMP_ADDRESS] if
-        (!defined(${$line->[HTML::Template::IF::VARIABLE]}) or 
-         !${$line->[HTML::Template::IF::VARIABLE]});
-    } elsif ($type eq 'HTML::Template::UNLESS') {
-      $x = $line->[HTML::Template::UNLESS::JUMP_ADDRESS] if
-        (defined(${$line->[HTML::Template::UNLESS::VARIABLE]}) and
-         ${$line->[HTML::Template::UNLESS::VARIABLE]});
-    } elsif ($type eq 'HTML::Template::ELSE') {
-      if ($line->[HTML::Template::ELSE::POLARITY] == HTML::Template::ELSE::POLARITY_IF) {
-        $x = $line->[HTML::Template::ELSE::JUMP_ADDRESS] if
-          (defined(${$line->[HTML::Template::ELSE::VARIABLE]}) and 
-           ${$line->[HTML::Template::ELSE::VARIABLE]});
+    } elsif ($type eq 'HTML::Template::COND') {
+      if ($line->[HTML::Template::COND::JUMP_IF_TRUE]) {
+        if ($line->[HTML::Template::COND::VARIABLE_TYPE] == HTML::Template::COND::VARIABLE_TYPE_VAR) {
+          $x = $line->[HTML::Template::COND::JUMP_ADDRESS] if
+            (defined $line->[HTML::Template::COND::VARIABLE] and
+             ${$line->[HTML::Template::COND::VARIABLE]});
+        } else {
+          $x = $line->[HTML::Template::COND::JUMP_ADDRESS] if
+            (defined $line->[HTML::Template::COND::VARIABLE][HTML::Template::LOOP::PARAM_SET] and
+             scalar @{$line->[HTML::Template::COND::VARIABLE][HTML::Template::LOOP::PARAM_SET]});
+        }
       } else {
-        $x = $line->[HTML::Template::ELSE::JUMP_ADDRESS] if
-          (!defined(${$line->[HTML::Template::ELSE::VARIABLE]}) or
-           !${$line->[HTML::Template::ELSE::VARIABLE]});
+        if ($line->[HTML::Template::COND::VARIABLE_TYPE] == HTML::Template::COND::VARIABLE_TYPE_VAR) {
+          $x = $line->[HTML::Template::COND::JUMP_ADDRESS] if
+            (not defined $line->[HTML::Template::COND::VARIABLE] or
+             not ${$line->[HTML::Template::COND::VARIABLE]});
+        } else {
+          $x = $line->[HTML::Template::COND::JUMP_ADDRESS] if
+            (not defined $line->[HTML::Template::COND::VARIABLE][HTML::Template::LOOP::PARAM_SET] or
+             not scalar @{$line->[HTML::Template::COND::VARIABLE][HTML::Template::LOOP::PARAM_SET]});
+        }
       }
     } elsif ($type eq 'HTML::Template::NOOP') {
       next;
@@ -1791,12 +2109,6 @@ sub new {
   return $self;
 }
 
-sub param {
-  my ($self, $param) = @_;
-  defined($param) and $$self = $param;
-  return $$self;
-}
-
 package HTML::Template::LOOP;
 
 sub new {
@@ -1804,12 +2116,6 @@ sub new {
   my $self = [];
   bless($self, $pkg);  
   return $self;
-}
-
-sub param {
-  my ($self, $param) = @_;
-  defined($param) and $self->[PARAM_SET] = $param;
-  return $self->[PARAM_SET];  
 }
 
 sub output {
@@ -1820,13 +2126,12 @@ sub output {
   my $value_sets_array = $self->[PARAM_SET];
   next unless defined($value_sets_array);  
   
-  if ($loop_context_vars) {
-    my $x = 0;
-    $value_sets_array->[$x]{__FIRST__} = 1;
-    for ($x = 1;$x < $#{$value_sets_array};$x++) {
+  if ($loop_context_vars and defined($value_sets_array->[0])) {
+    $value_sets_array->[0]{__FIRST__} = 1; 
+    $value_sets_array->[$#{$value_sets_array}]{__LAST__} = 1;  
+    for (my $x = 1;$x < $#{$value_sets_array};$x++) {
       $value_sets_array->[$x]{__INNER__} = 1;
     }
-    $value_sets_array->[$x]{__LAST__} = 1;
   }
   
   my $result = '';
@@ -1838,65 +2143,32 @@ sub output {
   return $result;
 }
 
-package HTML::Template::IF;
+package HTML::Template::COND;
 
 sub new {
   my $pkg = shift;
   my $var = shift;
   my $self = [];
   $self->[VARIABLE] = $var;
-  bless($self, $pkg);  
-  return $self;
-}
 
-package HTML::Template::UNLESS;
-
-sub new {
-  my $pkg = shift;
-  my $var = shift;
-  my $self = [];
-  $self->[VARIABLE] = $var;
-  bless($self, $pkg);  
-  return $self;
-}
-
-package HTML::Template::ELSE;
-
-sub new {
-  my $pkg = shift;
-  my $var = shift;
-  my $polarity = shift;
-  my $self = [];
-  $self->[VARIABLE] = $var;
-  $self->[POLARITY] = $polarity;
   bless($self, $pkg);  
   return $self;
 }
 
 package HTML::Template::NOOP;
-{
-  my $self;
-  sub new {
-    return $self if defined($self);
-
-    my $unused;
-    $self = \$unused;
-    bless($self, $_[0]);
-    return $self;
-  }
+sub new {
+  my $unused;
+  my $self = \$unused;
+  bless($self, $_[0]);
+  return $self;
 }
 
 package HTML::Template::ESCAPE;
-{
-  my $self;
-  sub new {
-    return $self if defined($self);
-
-    my $unused;
-    $self = \$unused;
-    bless($self, $_[0]);
-    return $self;
-  }
+sub new {
+  my $unused;
+  my $self = \$unused;
+  bless($self, $_[0]);
+  return $self;
 }
 
 1;
@@ -1907,12 +2179,12 @@ __END__
 In the interest of greater understanding I've started a FAQ section of
 the perldocs.  Please look in here before you send me email.
 
-=head2 Is there a place to go to discuss HTML::Template and/or get help?
+1) Is there a place to go to discuss HTML::Template and/or get help?
 
 There's a mailing-list for HTML::Template at htmltmpl@lists.vm.com.
 Send a blank message to htmltmpl-subscribe@lists.vm.com to join!
 
-=head2 I want support for <TMPL_XXX>!  How about it?
+2) I want support for <TMPL_XXX>!  How about it?
 
 Maybe.  I definitely encourage people to discuss their ideas for
 HTML::Template on the mailing list.  Please be ready to explain to me
@@ -1923,12 +2195,16 @@ NOTE: Offering to program said addition and provide it in the form of
 a patch to the most recent version of HTML::Template will definitely
 have a softening effect on potential opponents!
 
-=head2 I found a bug, can you fix it?
+3) I found a bug, can you fix it?
 
 That depends.  Did you send me the VERSION of HTML::Template, a test
 script and a test template?  If so, then almost certainly.
 
-=head2 <TMPL_VAR>s from the main template aren't working inside a <TMPL_LOOP>!  Why?
+If you're feeling really adventurous, HTML::Template has a publically
+available CVS server.  See below for more information in the PUBLIC
+CVS SERVER section.
+
+4) <TMPL_VAR>s from the main template aren't working inside a <TMPL_LOOP>!  Why?
 
 This is the intended behavior.  <TMPL_LOOP> introduces a separate
 scope for <TMPL_VAR>s much like a subroutine call in Perl introduces a
@@ -1936,7 +2212,7 @@ separate scope for "my" variables.  If you need to have a variable
 from the main template work inside a loop you'll need to manually
 provide the value for each iteration of the loop.
 
-=head2 Why do you use /[Tt]/ instead of /t/i?  It's so ugly!
+5) Why do you use /[Tt]/ instead of /t/i?  It's so ugly!
 
 Simple - the case-insensitive match switch is very inefficient.
 According to _Mastering_Regular_Expressions_ from O'Reilly Press,
@@ -1947,7 +2223,7 @@ string and keeps a temporary copy in memory.
 When this changes, and it is in the 5.6 development series, I will
 gladly use //i.  Believe me, I realize [Tt] is hideously ugly.
 
-=head2 How can I pre-load my templates using cache-mode and mod_perl?
+6) How can I pre-load my templates using cache-mode and mod_perl?
 
 Add something like this to your startup.pl:
 
@@ -1978,7 +2254,7 @@ instead getting a speed increase, you'll double your memory usage.  To
 find out if this is happening set cache_debug => 1 in your application
 code and look for "CACHE MISS" messages in the logs.
 
-=head2 What characters are allowed in TMPL_* NAMEs?
+7) What characters are allowed in TMPL_* NAMEs?
 
 Numbers, letters, '.', '/', '+', '-' and '_'.
 
@@ -1994,6 +2270,10 @@ forward said bug reports to the mailing list.
 When submitting bug reports, be sure to include full details,
 including the VERSION of the module, a test script and a test template
 demonstrating the problem!
+
+If you're feeling really adventurous, HTML::Template has a publically
+available CVS server.  See below for more information in the PUBLIC
+CVS SERVER section.
 
 =head1 CREDITS
 
@@ -2020,8 +2300,15 @@ provided by:
    Frank D. Cringle
    Winfried Koenig
    Matthew Wickline
+   Doug Steinwand
 
 Thanks!
+
+=head1 PUBLIC CVS SERVER
+
+HTML::Template now has a publicly accessible CVS server provided by
+SourceForge (www.sourceforge.net).  You can access it by going to
+http://sourceforge.net/cvs/?group_id=1075.  Give it a try!
 
 =head1 AUTHOR
 
