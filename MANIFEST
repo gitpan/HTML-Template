@@ -11,7 +11,11 @@ templates/long_loops.tmpl
 templates/include.tmpl
 templates/included.tmpl
 templates/included2.tmpl
+templates/other-loop.tmpl
+templates/if.tmpl
+templates/ifelse.tmpl
 scripts/time_trial.pl
 README
 LICENSE
+ANNOUNCE
 

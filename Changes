@@ -52,3 +52,10 @@ Revision history for Perl extension HTML::Template.
         - small performance improvements using typeglobs
         - added a performance testing script: time_trial.pl
         
+0.9
+        - <TMPL_IF> and <TMPL_ELSE>
+        - near total rewrite - faster, smaller, more "compiler-esque" code.
+        - *MASSIVE* speedups in all modes - up to 10x faster!1
+        - bug fix : param() wasn't returning names of LOOPs
+        - This really is version 0.9 so 1.0 is coming up.  Get those bug reports in!
+
