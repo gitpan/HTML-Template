@@ -3,7 +3,7 @@
 
 use strict;
 use Test;
-BEGIN { plan tests => 55 };
+BEGIN { plan tests => 57 };
 
 use HTML::Template;
 ok(1);
@@ -161,6 +161,7 @@ ok($output !~ /INSIDE/);
 my $template_i2 = HTML::Template->new(
                                       path => 'templates',
                                       filename => 'if.tmpl',
+                                      # stack_debug => 1,
                                       # debug => 1,
                                   );
 $template_i2->param(BOOL => 1);
@@ -717,3 +718,39 @@ my $template = HTML::Template->new(path => ['templates'],
 				   filename => 'include_path/one.tmpl');
 $output = $template->output;
 ok($output =~ /ONE/ and $output =~ /TWO/ and $output =~ /THREE/);
+
+# test using HTML_TEMPLATE_ROOT with path
+{
+    local $ENV{HTML_TEMPLATE_ROOT} = "templates";
+    $template = HTML::Template->new(
+                                    path => ['searchpath'],
+                                    filename => 'three.tmpl',
+                                   );
+    $output =  $template->output;
+    ok($output =~ /THREE/);
+}
+
+# test __counter__
+my $template = HTML::Template->new(path              => ['templates'],
+				   filename          => 'counter.tmpl',
+                                   loop_context_vars => 1);
+$template->param(foo => [ {a => 'a'}, {a => 'b'}, {a => 'c'} ]);
+$template->param(outer => [ {inner => [ {a => 'a'}, {a => 'b'}, {a => 'c'} ] },
+                            {inner => [ {a => 'x'}, {a => 'y'}, {a => 'z'} ] },                           ]);
+$output = $template->output;
+ok($output =~ /^1a2b3c$/m);
+ok($output =~ /^11a2b3c21x2y3z$/m);
+
+# test default
+my $template = HTML::Template->new(path              => ['templates'],
+				   filename          => 'default.tmpl');
+$template->param(cl => 'clothes');
+$template->param(start => 'start');
+$output = $template->output;
+ok($output =~ /cause it's getting hard to think, and my clothes are starting to shrink/);
+
+# test invalid <tmpl_var>
+eval {
+    my $template = HTML::Template->new(scalarref => \'<tmpl_var>');
+};
+ok($@ =~ /No NAME given/);

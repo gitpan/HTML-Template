@@ -1,6 +1,6 @@
 package HTML::Template;
 
-$HTML::Template::VERSION = '2.5';
+$HTML::Template::VERSION = '2.6';
 
 =head1 NAME
 
@@ -133,6 +133,12 @@ There is also the "ESCAPE=URL" option which may be used for VARs that
 populate a URL.  It will do URL escaping, like replacing ' ' with '+'
 and '/' with '%2F'.
 
+You can assign a default value to a variable with the DEFAULT
+attribute.  For example, this will output "the devil gave me a taco"
+if the "who" variable is not set.
+
+  The <TMPL_VAR NAME=WHO DEFAULT=devil> gave me a taco.
+
 =head2 TMPL_LOOP
 
   <TMPL_LOOP NAME="LOOP_NAME"> ... </TMPL_LOOP>
@@ -255,7 +261,8 @@ The file specified can be an absolute path (beginning with a '/' under
 Unix, for example).  If it isn't absolute, the path to the enclosing
 file is tried first.  After that the path in the environment variable
 HTML_TEMPLATE_ROOT is tried, if it exists.  Next, the "path" option is
-consulted.  As a final attempt, the filename is passed to open()
+consulted, first as-is and then with HTML_TEMPLATE_ROOT prepended if
+available.  As a final attempt, the filename is passed to open()
 directly.  See below for more information on HTML_TEMPLATE_ROOT and
 the "path" option to new().
 
@@ -602,7 +609,9 @@ path - you can set this variable with a list of paths to search for
 files specified with the "filename" option to new() and for files
 included with the <TMPL_INCLUDE> tag.  This list is only consulted
 when the filename is relative.  The HTML_TEMPLATE_ROOT environment
-variable is always tried first if it exists.  In the case of a
+variable is always tried first if it exists.  Also, if
+HTML_TEMPLATE_ROOT is set then an attempt will be made to prepend
+HTML_TEMPLATE_ROOT onto paths in the path array.  In the case of a
 <TMPL_INCLUDE> file, the path to the including file is also tried
 before path is consulted.
 
@@ -712,32 +721,42 @@ would only set one parameter without the "case_sensitive" option:
 
 This option defaults to off.
 
+NOTE: with case_sensitive and loop_context_vars the special loop
+variables are available in lower-case only.
+
 =item *
 
 loop_context_vars - when this parameter is set to true (it is false by
 default) four loop context variables are made available inside a loop:
-__FIRST__, __LAST__, __INNER__, __ODD__.  They can be used with
+__first__, __last__, __inner__, __odd__.  They can be used with
 <TMPL_IF>, <TMPL_UNLESS> and <TMPL_ELSE> to control how a loop is
-output.  Example:
+output.  
+
+In addition to the above, a __counter__ var is also made available
+when loop context variables are turned on.
+
+Example:
 
    <TMPL_LOOP NAME="FOO">
-      <TMPL_IF NAME="__FIRST__">
+      <TMPL_IF NAME="__first__">
         This only outputs on the first pass.
       </TMPL_IF>
 
-      <TMPL_IF NAME="__ODD__">
+      <TMPL_IF NAME="__odd__">
         This outputs every other pass, on the odd passes.
       </TMPL_IF>
 
-      <TMPL_UNLESS NAME="__ODD__">
+      <TMPL_UNLESS NAME="__odd__">
         This outputs every other pass, on the even passes.
       </TMPL_IF>
 
-      <TMPL_IF NAME="__INNER__">
+      <TMPL_IF NAME="__inner__">
         This outputs on passes that are neither first nor last.
       </TMPL_IF>
 
-      <TMPL_IF NAME="__LAST__">
+      This is pass number <TMPL_VAR NAME="__counter__">.
+
+      <TMPL_IF NAME="__last__">
         This only outputs on the last pass.
       <TMPL_IF>
    </TMPL_LOOP>
@@ -746,8 +765,8 @@ One use of this feature is to provide a "separator" similar in effect
 to the perl function join().  Example:
 
    <TMPL_LOOP FRUIT>
-      <TMPL_IF __LAST__> and </TMPL_IF>
-      <TMPL_VAR KIND><TMPL_UNLESS __LAST__>, <TMPL_ELSE>.</TMPL_UNLESS>
+      <TMPL_IF __last__> and </TMPL_IF>
+      <TMPL_VAR KIND><TMPL_UNLESS __last__>, <TMPL_ELSE>.</TMPL_UNLESS>
    </TMPL_LOOP>
 
 Would output (in a browser) something like:
@@ -755,8 +774,8 @@ Would output (in a browser) something like:
   Apples, Oranges, Brains, Toes, and Kiwi.
 
 Given an appropriate param() call, of course.  NOTE: A loop with only
-a single pass will get both __FIRST__ and __LAST__ set to true, but
-not __INNER__.
+a single pass will get both __first__ and __last__ set to true, but
+not __inner__.
 
 =item *
 
@@ -869,19 +888,19 @@ use File::Spec; # generate paths that work on all platforms
 # accesses into "objects".  I used to use 'use constant' but that
 # seems to cause occasional irritating warnings in older Perls.
 package HTML::Template::LOOP;
-sub TEMPLATE_HASH { 0; }
-sub PARAM_SET { 1 };
+sub TEMPLATE_HASH () { 0; }
+sub PARAM_SET     () { 1 };
 
 package HTML::Template::COND;
-sub VARIABLE { 0 };
-sub VARIABLE_TYPE { 1 };
-sub VARIABLE_TYPE_VAR { 0 };
-sub VARIABLE_TYPE_LOOP { 1 };
-sub JUMP_IF_TRUE { 2 };
-sub JUMP_ADDRESS { 3 };
-sub WHICH { 4 };
-sub WHICH_IF { 0 };
-sub WHICH_UNLESS { 1 };
+sub VARIABLE           () { 0 };
+sub VARIABLE_TYPE      () { 1 };
+sub VARIABLE_TYPE_VAR  () { 0 };
+sub VARIABLE_TYPE_LOOP () { 1 };
+sub JUMP_IF_TRUE       () { 2 };
+sub JUMP_ADDRESS       () { 3 };
+sub WHICH              () { 4 };
+sub WHICH_IF           () { 0 };
+sub WHICH_UNLESS       () { 1 };
 
 # back to the main package scope.
 package HTML::Template;
@@ -1490,12 +1509,20 @@ sub _find_file {
 
   # try "path" option list..
   foreach my $path (@{$options->{path}}) {
-    $filepath = File::Spec->canonpath(File::Spec->catfile($path, $filename));
+    $filepath = File::Spec->catfile($path, $filename);
     return File::Spec->canonpath($filepath) if -e $filepath;
   }
 
   # try even a relative path from the current directory...
   return File::Spec->canonpath($filename) if -e $filename;
+
+  # try "path" option list with HTML_TEMPLATE_ROOT prepended...
+  if (exists($ENV{HTML_TEMPLATE_ROOT})) {
+    foreach my $path (@{$options->{path}}) {
+      $filepath = File::Spec->catfile($ENV{HTML_TEMPLATE_ROOT}, $path, $filename);
+      return File::Spec->canonpath($filepath) if -e $filepath;
+    }
+  }
   
   return undef;
 }
@@ -1717,7 +1744,7 @@ sub _parse {
     qw(TMPL_VAR TMPL_LOOP TMPL_IF TMPL_UNLESS TMPL_INCLUDE);
     
   # variables used below that don't need to be my'd in the loop
-  my ($name, $which, $escape);
+  my ($name, $which, $escape, $default);
 
   # handle the old vanguard format
   $options->{vanguard_compatibility_mode} and 
@@ -1759,12 +1786,27 @@ sub _parse {
 
                     \s* 
 
+                    # DEFAULT attribute
+                    (?:
+                      [Dd][Ee][Ff][Aa][Uu][Ll][Tt]
+                      \s*=\s*
+                      (?:
+                        "([^">]*)"  # $2 => double-quoted DEFAULT value "
+                        |
+                        '([^'>]*)'  # $3 => single-quoted DEFAULT value
+                        |
+                        ([^\s=>]*)  # $4 => unquoted DEFAULT value
+                      )
+                    )?
+
+                    \s*
+
                     # ESCAPE attribute
                     (?:
                       [Ee][Ss][Cc][Aa][Pp][Ee]
                       \s*=\s*
                       (?:
-                         ( 0 | (?:"0") | (?:'0') ) # $2 => ESCAPE off
+                         (?: 0 | (?:"0") | (?:'0') )
                          |
                          ( 1 | (?:"1") | (?:'1') | 
                            (?:[Hh][Tt][Mm][Ll]) | 
@@ -1773,12 +1815,27 @@ sub _parse {
                            (?:[Uu][Rr][Ll]) | 
                            (?:"[Uu][Rr][Ll]") |
                            (?:'[Uu][Rr][Ll]') |
-                         )                         # $3 => ESCAPE on
+                         )                         # $5 => ESCAPE on
                        )
                     )* # allow multiple ESCAPEs
 
                     \s*
-                    
+
+                    # DEFAULT attribute
+                    (?:
+                      [Dd][Ee][Ff][Aa][Uu][Ll][Tt]
+                      \s*=\s*
+                      (?:
+                        "([^">]*)"  # $6 => double-quoted DEFAULT value "
+                        |
+                        '([^'>]*)'  # $7 => single-quoted DEFAULT value
+                        |
+                        ([^\s=>]*)  # $8 => unquoted DEFAULT value
+                      )
+                    )?
+
+                    \s*                    
+
                     # NAME attribute
                     (?:
                       (?:
@@ -1786,14 +1843,29 @@ sub _parse {
                         \s*=\s*
                       )?
                       (?:
-                        "([^">]*)" # $4 => double-quoted NAME value "
+                        "([^">]*)"  # $9 => double-quoted NAME value "
                         |
-                        '([^'>]*)' # $5 => single-quoted NAME value
+                        '([^'>]*)'  # $10 => single-quoted NAME value
                         |
-                        ([^\s=>]*)  # $6 => unquoted NAME value
+                        ([^\s=>]*)  # $11 => unquoted NAME value
                       )
                     )? 
                     
+                    \s*
+
+                    # DEFAULT attribute
+                    (?:
+                      [Dd][Ee][Ff][Aa][Uu][Ll][Tt]
+                      \s*=\s*
+                      (?:
+                        "([^">]*)"  # $12 => double-quoted DEFAULT value "
+                        |
+                        '([^'>]*)'  # $13 => single-quoted DEFAULT value
+                        |
+                        ([^\s=>]*)  # $14 => unquoted DEFAULT value
+                      )
+                    )?
+
                     \s*
 
                     # ESCAPE attribute
@@ -1801,7 +1873,7 @@ sub _parse {
                       [Ee][Ss][Cc][Aa][Pp][Ee]
                       \s*=\s*
                       (?:
-                         ( 0 | (?:"0") | (?:'0') ) # $7 => ESCAPE off
+                         (?: 0 | (?:"0") | (?:'0') )
                          |
                          ( 1 | (?:"1") | (?:'1') | 
                            (?:[Hh][Tt][Mm][Ll]) | 
@@ -1810,39 +1882,60 @@ sub _parse {
                            (?:[Uu][Rr][Ll]) | 
                            (?:"[Uu][Rr][Ll]") |
                            (?:'[Uu][Rr][Ll]') |
-                         )                         # $8 => ESCAPE on
+                         )                         # $15 => ESCAPE on
                        )
                     )* # allow multiple ESCAPEs
 
                     \s*
 
+                    # DEFAULT attribute
+                    (?:
+                      [Dd][Ee][Ff][Aa][Uu][Ll][Tt]
+                      \s*=\s*
+                      (?:
+                        "([^">]*)"  # $16 => double-quoted DEFAULT value "
+                        |
+                        '([^'>]*)'  # $17 => single-quoted DEFAULT value
+                        |
+                        ([^\s=>]*)  # $18 => unquoted DEFAULT value
+                      )
+                    )?
+
+                    \s*
+
                     (?:--)?>                    
-                    (.*) # $9 => $post - text that comes after the tag
+                    (.*) # $19 => $post - text that comes after the tag
                    $/sx) {
 
       $which = uc($1); # which tag is it
 
-      $escape = $3 || $8;
-      $escape = 0 if $2 || $7; # ESCAPE=0 
-      $escape = 0 unless defined($escape);
+      $escape = defined $5 ? $5 : defined $15 ? $15 : 0; # escape set?
       
       # what name for the tag?  undef for a /tag at most, one of the
       # following three will be defined
-      undef $name;
-      $name = $4 if defined($4);
-      $name = $5 if defined($5);
-      $name = $6 if defined($6);
+      $name = defined $9 ? $9 : defined $10 ? $10 : defined $11 ? $11 : undef;
+
+      # is there a default?
+      $default = defined $2  ? $2  : defined $3  ? $3  : defined $4  ? $4 : 
+                 defined $6  ? $6  : defined $7  ? $7  : defined $8  ? $8 : 
+                 defined $12 ? $12 : defined $13 ? $13 : defined $14 ? $14 : 
+                 defined $16 ? $16 : defined $17 ? $17 : defined $18 ? $18 :
+                 undef;
+
+      my $post = $19; # what comes after on the line
 
       # allow mixed case in filenames, otherwise flatten
-      $name = lc($name) unless ($which eq 'TMPL_INCLUDE' or $options->{case_sensitive});
-
-      my $post = $9; # what comes after on the line
+      $name = lc($name) unless (not defined $name or $which eq 'TMPL_INCLUDE' or $options->{case_sensitive});
 
       # die if we need a name and didn't get one
-      die "HTML::Template->new() : No NAME given to a $which tag at $fname : line $fcounter." if (!defined($name) and $need_names{$which});
+      die "HTML::Template->new() : No NAME given to a $which tag at $fname : line $fcounter." 
+        if ($need_names{$which} and (not defined $name or not length $name));
 
       # die if we got an escape but can't use one
       die "HTML::Template->new() : ESCAPE option invalid in a $which tag at $fname : line $fcounter." if ( $escape and ($which ne 'TMPL_VAR'));
+
+      # die if we got a default but can't use one
+      die "HTML::Template->new() : DEFAULT option invalid in a $which tag at $fname : line $fcounter." if ( defined $default and ($which ne 'TMPL_VAR'));
         
       # take actions depending on which tag found
       if ($which eq 'TMPL_VAR') {
@@ -1861,6 +1954,12 @@ sub _parse {
 	  $top_pmap{$name} = HTML::Template::VAR->new()
 	    if $options->{global_vars} and not exists $top_pmap{$name};
 	}
+
+        # if a DEFAULT was provided, push a DEFAULT object on the
+        # stack before the variable.
+	if (defined $default) {
+            push(@pstack, HTML::Template::DEFAULT->new($default));
+        }
 	
 	# if ESCAPE was set, push an ESCAPE op on the stack before
 	# the variable.  output will handle the actual work.
@@ -1871,7 +1970,7 @@ sub _parse {
 	    push(@pstack, $ESCAPE);
 	  }
 	}
-	
+
 	push(@pstack, $var);
 	
       } elsif ($which eq 'TMPL_LOOP') {
@@ -1913,10 +2012,11 @@ sub _parse {
 	# die_on_bad_params set output() will might cause errors
 	# when it tries to set them.
 	if ($options->{loop_context_vars}) {
-	  $pmap{__first__} = HTML::Template::VAR->new();
-	  $pmap{__inner__} = HTML::Template::VAR->new();
-	  $pmap{__last__} = HTML::Template::VAR->new();
-	  $pmap{__odd__} = HTML::Template::VAR->new();
+	  $pmap{__first__}   = HTML::Template::VAR->new();
+	  $pmap{__inner__}   = HTML::Template::VAR->new();
+	  $pmap{__last__}    = HTML::Template::VAR->new();
+	  $pmap{__odd__}     = HTML::Template::VAR->new();
+	  $pmap{__counter__} = HTML::Template::VAR->new();
 	}
 	
       } elsif ($which eq '/TMPL_LOOP') {
@@ -2435,6 +2535,7 @@ use vars qw(%URLESCAPE_MAP);
 sub output {
   my $self = shift;
   my $options = $self->{options};
+  local $_;
 
   croak("HTML::Template->output() : You gave me an odd number of parameters to output()!")
     unless ((@_ % 2) == 0);
@@ -2546,34 +2647,47 @@ sub output {
       }
     } elsif ($type eq 'HTML::Template::NOOP') {
       next;
+    } elsif ($type eq 'HTML::Template::DEFAULT') {
+      $_ = $x;  # remember default place in stack
+
+      # find next VAR, there might be an ESCAPE in the way
+      *line = \$parse_stack[++$x];
+      *line = \$parse_stack[++$x] if ref $line eq 'HTML::Template::ESCAPE';
+
+      # either output the default or go back
+      if (defined $$line) {
+        $x = $_;
+      } else {
+        $result .= ${$parse_stack[$_]};
+      }
+      next;      
     } elsif ($type eq 'HTML::Template::ESCAPE') {
-      $x++;
-      *line = \$parse_stack[$x];
+      *line = \$parse_stack[++$x];
       if (defined($$line)) {
-        my $toencode = $$line;
+        $_ = $$line;
         
         # straight from the CGI.pm bible.
-        $toencode=~s/&/&amp;/g;
-        $toencode=~s/\"/&quot;/g; #"
-        $toencode=~s/>/&gt;/g;
-        $toencode=~s/</&lt;/g;
-        $toencode=~s/'/&#39;/g; #'
+        s/&/&amp;/g;
+        s/\"/&quot;/g; #"
+        s/>/&gt;/g;
+        s/</&lt;/g;
+        s/'/&#39;/g; #'
         
-        $result .= $toencode;
+        $result .= $_;
       }
       next;
     } elsif ($type eq 'HTML::Template::URLESCAPE') {
       $x++;
       *line = \$parse_stack[$x];
       if (defined($$line)) {
-        my $toencode = $$line;
+        $_ = $$line;
         # Build a char->hex map if one isn't already available
         unless (exists($URLESCAPE_MAP{chr(1)})) {
           for (0..255) { $URLESCAPE_MAP{chr($_)} = sprintf('%%%02X', $_); }
         }
         # do the translation (RFC 2396 ^uric)
-        $toencode =~ s!([^a-zA-Z0-9_.\-])!$URLESCAPE_MAP{$1}!g;
-        $result .= $toencode;
+        s!([^a-zA-Z0-9_.\-])!$URLESCAPE_MAP{$1}!g;
+        $result .= $_;
       }
     } else {
       confess("HTML::Template::output() : Unknown item in parse_stack : " . $type);
@@ -2748,20 +2862,21 @@ sub _find_param {
 package HTML::Template::VAR;
 
 sub new {
-  my ($pkg) = @_;
-  my $value;
-  my $self = \$value;
-  bless($self, $pkg);
-  return $self;
+    my $value;
+    return bless(\$value, $_[0]);
+}
+
+package HTML::Template::DEFAULT;
+
+sub new {
+    my $value = $_[1];
+    return bless(\$value, $_[0]);
 }
 
 package HTML::Template::LOOP;
 
 sub new {
-  my ($pkg) = shift;
-  my $self = [];
-  bless($self, $pkg);  
-  return $self;
+    return bless([], $_[0]);
 }
 
 sub output {
@@ -2785,12 +2900,14 @@ sub output {
         @{$value_set}{qw(__first__ __inner__ __last__)} = (0,1,0);
       }
       $odd = $value_set->{__odd__} = not $odd;
+      $value_set->{__counter__} = $count + 1;
     }
     $template->param($value_set);    
     $result .= $template->output;
     $template->clear_params;
-    @{$value_set}{qw(__first__ __last__ __inner__ __odd__)} = (0,0,0,0)
-      if ($loop_context_vars);
+    @{$value_set}{qw(__first__ __last__ __inner__ __odd__ __counter__)} = 
+      (0,0,0,0)
+        if ($loop_context_vars);
     $count++;
   }
 
@@ -2858,14 +2975,25 @@ the perldocs.  Please look in here before you send me email.
 
 Q: Is there a place to go to discuss HTML::Template and/or get help?
 
-A: There's a mailing-list for HTML::Template at htmltmpl@lists.vm.com.
-Send a blank message to htmltmpl-subscribe@lists.vm.com to join!
+A: There's a mailing-list for discussing HTML::Template at
+html-template-users@lists.sourceforge.net.  To join:
 
+   http://lists.sourceforge.net/lists/listinfo/html-template-users
+
+If you just want to get email when new releases are available you can
+join the announcements mailing-list here:
+
+   http://lists.sourceforge.net/lists/listinfo/html-template-announce
+    
 =item 2
 
 Q: Is there a searchable archive for the mailing-list?
 
-A: Yes, thanks to Sean P. Scanlon, there is:
+A: Yes, you can find an archive of the SourceForge list here:
+
+  http://www.geocrawler.com/lists/3/SourceForge/23294/0/
+
+For an archive of the old vm.com list, setup by Sean P. Scanlon, see:
 
    http://bluedot.net/mail/archive/
 
@@ -3016,11 +3144,13 @@ reported success using to solve this problem.
 =head1 BUGS
 
 I am aware of no bugs - if you find one, join the mailing list and
-tell us about it (htmltmpl@lists.vm.com).  You can join the
-HTML::Template mailing-list by sending a blank email to
-htmltmpl-subscribe@lists.vm.com.  Of course, you can still email me
-directly (sam@tregar.com) with bugs, but I reserve the right to
-forward bug reports to the mailing list.
+tell us about it.  You can join the HTML::Template mailing-list by
+visiting:
+
+  http://lists.sourceforge.net/lists/listinfo/html-template-users
+
+Of course, you can still email me directly (sam@tregar.com) with bugs,
+but I reserve the right to forward bug reports to the mailing list.
 
 When submitting bug reports, be sure to include full details,
 including the VERSION of the module, a test script and a test template
@@ -3102,9 +3232,7 @@ http://sourceforge.net/cvs/?group_id=1075.  Give it a try!
 
 =head1 AUTHOR
 
-Sam Tregar, sam@tregar.com (you can also find me on the mailing list
-at htmltmpl@lists.vm.com - join it by sending a blank message to
-htmltmpl-subscribe@lists.vm.com).
+Sam Tregar, sam@tregar.com
 
 =head1 LICENSE
 

@@ -211,3 +211,20 @@ Revision history for Perl extension HTML::Template.
                  tutorial, fixed typos and formatting
       - Doc Fix: added reference to new HTML::Template website at
                  http://html-template.sourceforge.net/
+
+2.6 Thu Aug 29 12:00:00 2002
+      - New Feature: HTML::Template will combine HTML_TEMPLATE_ROOT
+                     environment variable and path option if both are
+                     available. (Jesse Erlbaum)
+      - New Feature: __counter__ variable now available when
+                     loop_context_vars is set (Simran Gambhir)
+      - New Feature: The default attribute allows you to specify
+                     defaults for <tmpl_var> tags.
+      - Bug Fix: fixed parser to reject <tmpl_var>s with no names.
+                 (crazyinsomniac)
+      - Doc Fix: fixed documentation to correctly describe the
+                 interaction of case_sensitive and loop_context_vars.
+                 (Peter Claus Lamprecht)
+      - Doc Fix: updated mailing-list information to reflect move from
+                 vm.com to sourceforge.net
+

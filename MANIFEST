@@ -38,6 +38,8 @@ templates/newline_test1.tmpl
 templates/newline_test2.tmpl
 templates/case_loop.tmpl
 templates/global-loops.tmpl
+templates/counter.tmpl
+templates/default.tmpl
 scripts/time_trial.pl
 scripts/clean_shm.pl
 README

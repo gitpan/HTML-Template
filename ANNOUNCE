@@ -1,27 +1,30 @@
-ANNOUNCEMENT: HTML::Template 2.5
+ANNOUNCEMENT: HTML::Template 2.6
 
 HTML::Template - a Perl module to use HTML Templates
 
 CHANGES
 
-2.5
+2.6
 
-- Doc Fix: added reference to new HTML::Template website at
-           http://html-template.sourceforge.net
+- New Feature: HTML::Template will combine HTML_TEMPLATE_ROOT
+               environment variable and path option if both are
+               available. (Jesse Erlbaum)
 
-- Bug Fix: global_vars fixed for loops within loops
+- New Feature: __counter__ variable now available when
+              loop_context_vars is set (Simran Gambhir)
 
-- Bug Fix: include paths were broken under Windows (David Ferrance)
+- New Feature: The default attribute allows you to specify
+               defaults for <tmpl_var> tags.
 
-- Bug Fix: nested include path handling was wrong (Gyepi Sam)
+- Bug Fix: fixed parser to reject <tmpl_var>s with no names.
+           (crazyinsomniac)
 
-- Bug Fix: MD5 signatures for file cache corrected (Martin Schroth)
+- Doc Fix: fixed documentation to correctly describe the
+           interaction of case_sensitive and loop_context_vars.
+           (Peter Claus Lamprecht)
 
-- Bug Fix: print_to was broken for tied filehandles (Darren Chamberlain)
-
-- Doc Fix: added mailing-list archive URL to FAQ, added link to
-           tutorial, fixed typos and formatting
-
+- Doc Fix: updated mailing-list information to reflect move from
+           vm.com to sourceforge.net
 
 DESCRIPTION
 
