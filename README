@@ -14,8 +14,6 @@ variables, loops and branches declared in the template.  This allows
 you to seperate design - the HTML - from the data, which you generate
 in the Perl script.
 
-This module is licenced under the GPL.  See the LICENSE section
-below for more details.
 
 MOTIVATION
 
@@ -81,21 +79,27 @@ htmltmpl-subscribe@lists.vm.com.
 
 LICENSE
 
-HTML::Template : A system for using HTML Templates with Perl
-Copyright (C) 1999 Sam Tregar (sam@tregar.com)
+HTML::Template : A module for using HTML Templates with Perl
+Copyright (C) 2000 Sam Tregar (sam@tregar.com)
 
-This program is free software; you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation; either version 2 of the License, or (at
-your option) any later version.
+This module is free software; you can redistribute it and/or modify it
+under the terms of either:
 
-This program is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-General Public License for more details.
+a) the GNU General Public License as published by the Free Software
+Foundation; either version 1, or (at your option) any later version,
+or
+
+b) the "Artistic License" which comes with this module.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See either
+the GNU General Public License or the Artistic License for more details.
+
+You should have received a copy of the Artistic License with this
+module, in the file ARTISTIC.  If not, I'll be glad to provide one.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
 USA
-

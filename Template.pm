@@ -1,6 +1,6 @@
 package HTML::Template;
 
-$HTML::Template::VERSION = '1.7';
+$HTML::Template::VERSION = '1.8';
 
 =head1 NAME
 
@@ -121,7 +121,7 @@ In order to realize a dramatic savings in bandwidth, the standard
 (non-comment) tags will be used throughout the rest of this
 documentation.
 
-=head2 <TMPL_VAR ?ESCAPE=1? NAME="PARAMETER_NAME">
+=head2 <TMPL_VAR NAME="PARAMETER_NAME">
 
 The <TMPL_VAR> tag is very simple.  For each <TMPL_VAR> tag in the
 template you call $template->param(PARAMETER_NAME => "VALUE").  When
@@ -260,7 +260,8 @@ Inside a <TMPL_LOOP>, the only variables that are usable are the ones
 from the <TMPL_LOOP>.  The variables in the outer blocks are not
 visible within a template loop.  For the computer-science geeks among
 you, a <TMPL_LOOP> introduces a new scope much like a perl subroutine
-call.  Unlike perl, there are no global variables in the templates.
+call.  If you want your variables to be global you can use
+'global_vars' option to new described below.
 
 =head2 <TMPL_INCLUDE NAME="filename.tmpl">
 
@@ -591,10 +592,10 @@ not __INNER__.
 path - you can set this variable with a list of paths to search for
 files specified with the "filename" option to new() and for files
 included with the <TMPL_INCLUDE> tag.  This list is only consulted
-when the filename is relative - i.e. does not begin with a '/'.  The
-HTML_TEMPLATE_ROOT environment variable is always tried first if it
-exists.  In the case of a <TMPL_INCLUDE> file, the path to the
-including file is also tried before path is consulted.
+when the filename is relative.  The HTML_TEMPLATE_ROOT environment
+variable is always tried first if it exists.  In the case of a
+<TMPL_INCLUDE> file, the path to the including file is also tried
+before path is consulted.
 
 Example:
 
@@ -604,12 +605,33 @@ Example:
                                                ]
                                       );
 
+NOTE: the paths in the path list must be expressed as UNIX paths,
+separated by the forward-slash character ('/').
+
 =item *
 
 max_includes - set this variable to determine the maximum depth that
 includes can reach.  Set to 10 by default.  Including files to a depth
 greater than this value causes an error message to be displayed.  Set
 to 0 to disable this protection.
+
+=item *
+
+global_vars - normally variables declared outside a loop are not
+available inside a loop.  This option makes <TMPL_VAR>s like global
+variables in Perl - they have unlimited scope.  This option also
+affects <TMPL_IF> and <TMPL_UNLESS>.
+
+Example:
+
+  This is a normal variable: <TMPL_VAR NORMAL>.<P>
+
+  <TMPL_LOOP NAME=FROOT_LOOP>
+     Here it is inside the loop: <TMPL_VAR NORMAL><P>
+  </TMPL_LOOP>
+
+Normally this wouldn't work as expected, since <TMPL_VAR NORMAL>'s
+value outside the loop is not available inside the loop.
 
 =item *
 
@@ -654,6 +676,7 @@ use integer; # no floating point math so far!
 use strict; # and no funny business, either.
 
 use Carp; # generate better errors with more context
+use File::Spec; # generate paths that work on all platforms
 
 # define accessor constants used to improve readability of array
 # accesses into "objects".  I used to use 'use constant' but that
@@ -675,11 +698,6 @@ sub WHICH_UNLESS { 1 };
 
 # back to the main package scope.
 package HTML::Template;
-
-use vars qw($NOOP $ESCAPE $URLESCAPE);
-$NOOP = HTML::Template::NOOP->new();
-$ESCAPE = HTML::Template::ESCAPE->new();
-$URLESCAPE = HTML::Template::URLESCAPE->new();
 
 # open a new template and return an object handle
 sub new {
@@ -713,6 +731,7 @@ sub new {
                ipc_mode => 0666,
                ipc_segment_size => 65536,
                ipc_max_size => 0,
+               global_vars => 0,
               );
   
   # load in options supplied to new()
@@ -1077,30 +1096,30 @@ sub _find_file {
   my $filepath;
 
   # first check for a full path
-  return $filename 
-      if (($filename =~ /^\//) and (-e $filename));
+  return File::Spec->canonpath($filename)
+    if (File::Spec->file_name_is_absolute($filename) and (-e $filename));
 
   # try the extra_path if one was specified
   if (defined($extra_path)) {
     $extra_path->[$#{$extra_path}] = $filename;
-    $filepath = join('/', @$extra_path);
-    return $filepath if -e $filepath;
+    $filepath = File::Spec->canonpath(File::Spec->catfile(@$extra_path));
+    return File::Spec->canonpath($filepath) if -e $filepath;
   }
 
   # try pre-prending HTML_Template_Root
   if (exists($ENV{HTML_TEMPLATE_ROOT})) {
-    $filepath = join('/', split(/\/+/, $ENV{HTML_TEMPLATE_ROOT}), $filename);
-    return $filepath if -e $filepath;
+    $filepath =  File::Spec->catfile($ENV{HTML_TEMPLATE_ROOT}, $filename);
+    return File::Spec->canonpath($filepath) if -e $filepath;
   }
 
   # try "path" option list..
   foreach my $path (@{$options->{path}}) {
-    $filepath = join('/', split(/\/+/, $path), $filename);
-    return $filepath if -e $filepath;
+    $filepath = File::Spec->canonpath(File::Spec->catfile($path, $filename));
+    return File::Spec->canonpath($filepath) if -e $filepath;
   }
 
   # try even a relative path from the current directory...
-  return $filename if -e $filename;
+  return File::Spec->canonpath($filename) if -e $filename;
   
   return undef;
 }
@@ -1208,8 +1227,8 @@ sub _parse {
   # setup the stacks and maps - they're accessed by typeglobs that
   # reference the top of the stack.  They are masked so that a loop
   # can transparently have its own versions.
-  use vars qw(@pstack %pmap @ifstack @ucstack);
-  local (*pstack, *ifstack, *pmap, *ucstack);
+  use vars qw(@pstack %pmap @ifstack @ucstack %top_pmap);
+  local (*pstack, *ifstack, *pmap, *ucstack, *top_pmap);
   
   # the pstack is the array of scalar refs (plain text from the
   # template file), VARs, LOOPs, IFs and ELSEs that output() works on
@@ -1224,6 +1243,7 @@ sub _parse {
   # pmap at all!
   my @pmaps = ({});
   *pmap = $pmaps[0];
+  *top_pmap = $pmaps[0];
   $self->{param_map} = $pmaps[0];
 
   # the ifstack is a temporary stack containing pending ifs and elses
@@ -1256,6 +1276,10 @@ sub _parse {
                  scalar @{$self->{template}}
                 ]);
   (*fname, *fcounter, *fmax) = \ ( @{$fstack[0]} );
+
+  my $NOOP = HTML::Template::NOOP->new();
+  my $ESCAPE = HTML::Template::ESCAPE->new();
+  my $URLESCAPE = HTML::Template::URLESCAPE->new();
 
   # all the tags that need NAMEs:
   my %need_names = map { $_ => 1 } 
@@ -1413,6 +1437,8 @@ sub _parse {
           } else {
             $var = HTML::Template::VAR->new();
             $pmap{$name} = $var;
+            $top_pmap{$name} = HTML::Template::VAR->new()
+              if $options->{global_vars} and not exists $top_pmap{$name};
           }
 
           # push text coming before the tag onto the pstack,
@@ -1425,10 +1451,13 @@ sub _parse {
 
           # if ESCAPE was set, push an ESCAPE op on the stack before
           # the variable.  output will handle the actual work.
-          push(@pstack, $ESCAPE)
-            if ($escape and length($escape) == 4);
-          push(@pstack, $URLESCAPE)
-            if ($escape and length($escape) == 3);
+          if ($escape) {
+            if ($escape =~ /^"?[Uu][Rr][Ll]"?$/) {
+              push(@pstack, $URLESCAPE);
+            } else {
+              push(@pstack, $ESCAPE);
+            }
+          }
           
           push(@pstack, $var);
 
@@ -1515,6 +1544,8 @@ sub _parse {
               $uc->[HTML::Template::COND::VARIABLE] = $pmap{$var};
             } else {
               $pmap{$var} = HTML::Template::VAR->new();
+              $top_pmap{$var} = HTML::Template::VAR->new()
+                if $options->{global_vars} and not exists $top_pmap{$var};
               $uc->[HTML::Template::COND::VARIABLE] = $pmap{$var};
             }
             if (ref($pmap{$var}) eq 'HTML::Template::VAR') {
@@ -1536,12 +1567,12 @@ sub _parse {
           *ifstack = $ifstacks[$#ifstacks];
           pop(@ucstacks);
           *ucstack = $ucstacks[$#ucstacks];
-          
+
           # instantiate the sub-Template, feeding it parse_stack and
           # param_map.  This means that only the enclosing template
           # does _parse() - sub-templates get their parse_stack and
           # param_map fed to them already filled in.
-          $loop->[HTML::Template::LOOP::TEMPLATE_HASH]{$starts_at} 
+          $loop->[HTML::Template::LOOP::TEMPLATE_HASH]{$starts_at}             
             = HTML::Template->_new_from_loop(
                                              parse_stack => $parse_stack,
                                              param_map => $param_map,
@@ -1759,6 +1790,8 @@ sub _parse {
       $uc->[HTML::Template::COND::VARIABLE] = $pmap{$var};
     } else {
       $pmap{$var} = HTML::Template::VAR->new();
+      $top_pmap{$var} = HTML::Template::VAR->new()
+        if $options->{global_vars} and not exists $top_pmap{$var};
       $uc->[HTML::Template::COND::VARIABLE] = $pmap{$var};
     }
     if (ref($pmap{$var}) eq 'HTML::Template::VAR') {
@@ -1767,7 +1800,9 @@ sub _parse {
       $uc->[HTML::Template::COND::VARIABLE_TYPE] = HTML::Template::COND::VARIABLE_TYPE_LOOP;
     }
   }
-              
+
+  # globalize vars?
+  $self->_globalize_vars() if ($options->{global_vars});
 
   # want a stack dump?
   if ($options->{stack_debug}) {
@@ -1777,6 +1812,22 @@ sub _parse {
 
   # all done with template
   delete $self->{template};
+}
+
+# a recursive sub that associates each loop with the loops above
+# (treating the top-level as a loop)
+sub _globalize_vars {
+  my $self = shift;
+  
+  # associate with the loop (and top-level templates) above in the tree.
+  push(@{$self->{options}{associate}}, @_);
+  
+  # recurse down into the template tree, adding ourself to the end of
+  # list.
+  push(@_, $self);
+  map { $_->_globalize_vars(@_) } 
+    map {values %{$_->[HTML::Template::LOOP::TEMPLATE_HASH]}}
+      grep { ref($_) eq 'HTML::Template::LOOP'} @{$self->{parse_stack}};
 }
 
 =head2 param
@@ -2283,20 +2334,29 @@ sub output {
   my $value_sets_array = $self->[PARAM_SET];
   next unless defined($value_sets_array);  
   
-  if ($loop_context_vars and defined($value_sets_array->[0])) {
-    $value_sets_array->[0]{__FIRST__} = 1; 
-    $value_sets_array->[$#{$value_sets_array}]{__LAST__} = 1;  
-    for (my $x = 1;$x < $#{$value_sets_array};$x++) {
-      $value_sets_array->[$x]{__INNER__} = 1;
-    }
-  }
-  
   my $result = '';
+  my $count = 0;
   foreach my $value_set (@$value_sets_array) {
+    if ($loop_context_vars) {
+      if ($count == 0) {
+	$value_set->{__FIRST__} = 1;
+      } elsif ($count == $#{$value_sets_array}) {
+	$value_set->{__LAST__} = 1;
+      } else {
+	$value_set->{__INNER__} = 1;
+      }
+    }
     $template->param($value_set);    
     $result .= $template->output;
     $template->clear_params;
+    if ($loop_context_vars) {
+      delete $value_set->{__FIRST__};
+      delete $value_set->{__LAST__};
+      delete $value_set->{__INNER__};
+    }
+    $count++;
   }
+
   return $result;
 }
 
@@ -2373,9 +2433,11 @@ CVS SERVER section.
 
 This is the intended behavior.  <TMPL_LOOP> introduces a separate
 scope for <TMPL_VAR>s much like a subroutine call in Perl introduces a
-separate scope for "my" variables.  If you need to have a variable
-from the main template work inside a loop you'll need to manually
-provide the value for each iteration of the loop.
+separate scope for "my" variables.  
+
+If you want your <TMPL_VAR>s to be global you can set the
+'global_vars' option when you call new().  See above for documentation
+of the 'global_vars' new() option.
 
 5) Why do you use /[Tt]/ instead of /t/i?  It's so ugly!
 
@@ -2515,6 +2577,8 @@ provided by:
    Michael Lloyd
    Simran Gambhir
    Chris Houser <chouser@bluweb.com>
+   Larry Moore
+   Todd Larason
 
 Thanks!
 
@@ -2533,18 +2597,24 @@ htmltmpl-subscribe@lists.vm.com).
 =head1 LICENSE
 
 HTML::Template : A module for using HTML Templates with Perl
+Copyright (C) 2000 Sam Tregar (sam@tregar.com)
 
-Copyright (C) 1999 Sam Tregar (sam@tregar.com)
+This module is free software; you can redistribute it and/or modify it
+under the terms of either:
 
-This program is free software; you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation; either version 2 of the License, or (at
-your option) any later version.
+a) the GNU General Public License as published by the Free Software
+Foundation; either version 1, or (at your option) any later version,
+or
 
-This program is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-General Public License for more details.
+b) the "Artistic License" which comes with this module.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See either
+the GNU General Public License or the Artistic License for more details.
+
+You should have received a copy of the Artistic License with this
+module, in the file ARTISTIC.  If not, I'll be glad to provide one.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software

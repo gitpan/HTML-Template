@@ -23,8 +23,10 @@ templates/loop-if.tmpl
 templates/urlescape.tmpl
 templates/query-test.tmpl
 templates/query-test2.tmpl
+templates/globals.tmpl
 scripts/time_trial.pl
 scripts/clean_shm.pl
 README
-LICENSE
+GPL
+ARTISTIC
 ANNOUNCE

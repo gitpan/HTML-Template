@@ -20,7 +20,8 @@ print "ok 1\n";
 
 # test a simple template
 my $template = HTML::Template->new(
-                                   filename => 'templates/simple.tmpl',
+                                   path => 'templates',
+                                   filename => 'simple.tmpl',
                                    debug => 0
                                   );
 
@@ -38,8 +39,9 @@ if ($output =~ /ADJECTIVE/) {
 
 # try something a bit larger
 $template = HTML::Template->new(
-                                       filename => 'templates/medium.tmpl',
-                                       # debug => 1,
+                                path => 'templates',
+                                filename => 'medium.tmpl',
+                                # debug => 1,
                                       );
 $template->param('ALERT', 'I am alert.');
 $template->param('COMPANY_NAME', "MY NAME IS");
@@ -57,7 +59,7 @@ $template->param('DESCRIPTION',"dsa;kljkldasfjkldsajflkjdsfklfjdsgkfld\nalskdjkl
 $template->param('WEBSITE','http://www.assforyou.com/');
 $template->param('INTRANET_URL','http://www.something.com');
 $template->param('REMOVE_BUTTON', "<INPUT TYPE=SUBMIT NAME=command VALUE=\"Remove Office\">");
-$template->param('COMPANY_ADMIN_AREA', "<A HREF=administrator.cgi?office_id=${office_id}&command=manage>Manage Office Administrators</A>");
+$template->param('COMPANY_ADMIN_AREA', "<A HREF=administrator.cgi?office_id={office_id}&command=manage>Manage Office Administrators</A>");
 $template->param('CASESTUDIES_LIST', "adsfkljdskldszfgfdfdsgdsfgfdshghdmfldkgjfhdskjfhdskjhfkhdsakgagsfjhbvdsaj hsgbf jhfg sajfjdsag ffasfj hfkjhsdkjhdsakjfhkj kjhdsfkjhdskfjhdskjfkjsda kjjsafdkjhds kjds fkj skjh fdskjhfkj kj kjhf kjh sfkjhadsfkj hadskjfhkjhs ajhdsfkj akj fkj kj kj  kkjdsfhk skjhadskfj haskjh fkjsahfkjhsfk ksjfhdkjh sfkjhdskjfhakj shiou weryheuwnjcinuc 3289u4234k 5 i 43iundsinfinafiunai saiufhiudsaf afiuhahfwefna uwhf u auiu uh weiuhfiuh iau huwehiucnaiuncianweciuninc iuaciun iucniunciunweiucniuwnciwe");
 $template->param('NUMBER_OF_CONTACTS', "aksfjdkldsajfkljds");
 $template->param('COUNTRY_SELECTOR', "klajslkjdsafkljds");
@@ -73,9 +75,10 @@ if ($output =~ /<TMPL_VAR/) {
 
 # test a simple loop template
 $template = HTML::Template->new(
-                                   filename => 'templates/simple-loop.tmpl',
-                                   # debug => 1,
-                                  );
+                                path => 'templates',
+                                filename => 'simple-loop.tmpl',
+                                # debug => 1,
+                               );
 $template->param('ADJECTIVE_LOOP', [ { ADJECTIVE => 'really' }, { ADJECTIVE => 'very' } ] );
 
 $output =  $template->output;
@@ -89,9 +92,10 @@ if ($output =~ /ADJECTIVE_LOOP/) {
 
 # test a simple loop template
 $template = HTML::Template->new(
-                                   filename => 'templates/simple-loop-nonames.tmpl',
-                                   # debug => 1,
-                                  );
+                                path => 'templates',
+                                filename => 'simple-loop-nonames.tmpl',
+                                # debug => 1,
+                               );
 $template->param('ADJECTIVE_LOOP', [ { ADJECTIVE => 'really' }, { ADJECTIVE => 'very' } ] );
 
 $output =  $template->output;
@@ -105,15 +109,17 @@ if ($output =~ /ADJECTIVE_LOOP/) {
 
 # test a long loop template - mostly here to use timing on.
 $template = HTML::Template->new(
-                                filename => 'templates/long_loops.tmpl',
-                                   # debug => 1,
-                                  );
+                                path => 'templates',
+                                filename => 'long_loops.tmpl',
+                                # debug => 1,
+                               );
 $output =  $template->output;
 print "ok 6\n";
 
 # test a template with TMPL_INCLUDE
 $template = HTML::Template->new(
-                                filename => 'templates/include.tmpl',
+                                path => 'templates',
+                                filename => 'include.tmpl',
                                 # debug => 1,
                                );
 $output =  $template->output;
@@ -125,7 +131,8 @@ if (!($output =~ /5/) || !($output =~ /6/)) {
 
 # test a template with TMPL_INCLUDE and cacheing.
 $template = HTML::Template->new(
-                                filename => 'templates/include.tmpl',
+                                path => 'templates',
+                                filename => 'include.tmpl',
                                 cache => 1,
                                 # cache_debug => 1,
                                 # debug => 1,
@@ -139,7 +146,8 @@ if (!($output =~ /5/) || !($output =~ /6/)) {
 # system('touch templates/included2.tmpl');
 
 my $template2 = HTML::Template->new(
-                                    filename => 'templates/include.tmpl',
+                                    path => 'templates',
+                                    filename => 'include.tmpl',
                                     cache => 1,
                                     # cache_debug => 1,
                                     # debug => 1,
@@ -153,13 +161,15 @@ if (!($output =~ /5/) || !($output =~ /6/)) {
 
 # test associate
 my $template_one = HTML::Template->new(
-                                       filename => 'templates/simple.tmpl',                                
+                                       path => 'templates',
+                                       filename => 'simple.tmpl',
                                        # debug => 1,
                                       );
 $template_one->param('ADJECTIVE', 'very');
 
 my $template_two = HTML::Template->new (
-                                        filename => 'templates/simple.tmpl',
+                                        path => 'templates',
+                                        filename => 'simple.tmpl',
                                         associate => $template_one,
                                         # debug => 1,
                                        );
@@ -175,8 +185,9 @@ if ($output =~ /ADJECTIVE/) {
 
 # test a simple loop template
 my $template_l = HTML::Template->new(
-                                   filename => 'templates/other-loop.tmpl',
-                                   # debug => 1,
+                                     path => 'templates',
+                                     filename => 'other-loop.tmpl',
+                                     # debug => 1,
                                   );
 # $template_l->param('ADJECTIVE_LOOP', [ { ADJECTIVE => 'really' }, { ADJECTIVE => 'very' } ] );
 
@@ -190,8 +201,9 @@ if ($output =~ /INSIDE/) {
 
 # test a simple if template
 my $template_i = HTML::Template->new(
-                                   filename => 'templates/if.tmpl',
-                                   # debug => 1,
+                                     path => 'templates',
+                                     filename => 'if.tmpl',
+                                     # debug => 1,
                                   );
 # $template_l->param('ADJECTIVE_LOOP', [ { ADJECTIVE => 'really' }, { ADJECTIVE => 'very' } ] );
 
@@ -204,8 +216,9 @@ if ($output =~ /INSIDE/) {
 
 # test a simple if template
 my $template_i2 = HTML::Template->new(
-                                   filename => 'templates/if.tmpl',
-                                   # debug => 1,
+                                      path => 'templates',
+                                      filename => 'if.tmpl',
+                                      # debug => 1,
                                   );
 $template_i2->param(BOOL => 1);
 
@@ -219,9 +232,10 @@ if ($output !~ /INSIDE/) {
 
 # test a simple if/else template
 my $template_ie = HTML::Template->new(
-                                   filename => 'templates/ifelse.tmpl',
-                                   # debug => 1,
-                                  );
+                                      path => 'templates',
+                                      filename => 'ifelse.tmpl',
+                                      # debug => 1,
+                                     );
 
 $output =  $template_ie->output;
 if ($output !~ /INSIDE ELSE/) {
@@ -234,9 +248,10 @@ if ($output !~ /INSIDE ELSE/) {
 
 # test a simple if/else template
 my $template_ie2 = HTML::Template->new(
-                                   filename => 'templates/ifelse.tmpl',
-                                   # debug => 1,
-                                  );
+                                       path => 'templates',
+                                       filename => 'ifelse.tmpl',
+                                       # debug => 1,
+                                      );
 $template_ie2->param(BOOL => 1);
 
 $output =  $template_ie2->output;
@@ -250,7 +265,8 @@ if ($output !~ /INSIDE IF/) {
 
 # test a bug involving two loops with the same name
 $template = HTML::Template->new(
-                                filename => 'templates/double_loop.tmpl',
+                                path => 'templates',
+                                filename => 'double_loop.tmpl',
                                 # debug => 1,
                                );
 $template->param('myloop', [
@@ -268,7 +284,8 @@ if ($output !~ /David/) {
 
 # test escapeing
 $template = HTML::Template->new(
-                                filename => 'templates/escape.tmpl',
+                                path => 'templates',
+                                filename => 'escape.tmpl',
                                 # debug => 1,
                                );
 $template->param(STUFF => '<>"'); #"
@@ -282,9 +299,10 @@ if ($output =~ /[<>"]/) { #"
 
 # test a simple template, using new param() call format
 $template = HTML::Template->new(
-                                   filename => 'templates/simple.tmpl',
-                                   # debug => 1,
-                                  );
+                                path => 'templates',
+                                filename => 'simple.tmpl',
+                                # debug => 1,
+                               );
 
 $template->param(
                  {
@@ -303,7 +321,8 @@ if ($output =~ /ADJECTIVE/) {
 # test a recursively including template
 eval {
   $template = HTML::Template->new(
-                                  filename => 'templates/recursive.tmpl',
+                                  path => 'templates',
+                                  filename => 'recursive.tmpl',
                                  );
   
   $output =  $template->output;
@@ -317,7 +336,8 @@ if (defined($@) and ($@ =~ /recursive/)) {
 
 # test a template using unless
 $template = HTML::Template->new(
-                                filename => 'templates/unless.tmpl',
+                                path => 'templates',
+                                filename => 'unless.tmpl',
                                 # debug => 1
                                );
 $template->param(BOOL => 1);
@@ -333,7 +353,8 @@ if ($output =~ /INSIDE UNLESS/) {
 
 # test a template using unless
 $template = HTML::Template->new(
-                                filename => 'templates/unless.tmpl',
+                                path => 'templates',
+                                filename => 'unless.tmpl',
                                 #debug => 1,
                                 #debug_stack => 1
                                );
@@ -351,7 +372,8 @@ if ($output !~ /INSIDE UNLESS/) {
 
 # test a template using loop_context_vars
 $template = HTML::Template->new(
-                                filename => 'templates/context.tmpl',
+                                path => 'templates',
+                                filename => 'context.tmpl',
                                 loop_context_vars => 1,
                                 #debug => 1,
                                 #debug_stack => 1
@@ -372,7 +394,8 @@ if ($output !~ /Apples, Oranges, Brains, Toes, and Kiwi./) {
 }
 
 $template = HTML::Template->new(
-                                filename => 'templates/loop-if.tmpl',
+                                path => 'templates',
+                                filename => 'loop-if.tmpl',
                                 #debug => 1,
                                 #debug_stack => 1
                                );
@@ -385,7 +408,8 @@ if ($output !~ /Loop not filled in/) {
 
 
 $template = HTML::Template->new(
-                                filename => 'templates/loop-if.tmpl',
+                                path => 'templates',
+                                filename => 'loop-if.tmpl',
                                 #debug => 1,
                                 #debug_stack => 1
                                );
@@ -466,7 +490,8 @@ if ($@) {
   my $query = CGI->new('');
   $query->param('AdJecTivE' => 'very');
   my $template = HTML::Template->new(
-                                     filename => 'templates/simple.tmpl',
+                                     path => 'templates',
+                                     filename => 'simple.tmpl',
                                      debug => 0,
                                      associate => $query,
                                     );
@@ -482,11 +507,12 @@ if ($@) {
 
 # test subroutine as VAR
 $template = HTML::Template->new(
-                                filename => 'templates/simple.tmpl',
+                                path => 'templates',
+                                filename => 'simple.tmpl',
                                 debug => 0,
                                );
 $template->param(ADJECTIVE => sub { return 'v' . '1e' . '2r' . '3y'; });
-my $output =  $template->output;
+$output =  $template->output;
 if ($output =~ /ADJECTIVE/) {
   die "not ok 26\n";
 } elsif ($output =~ /v1e2r3y/) {
@@ -504,7 +530,7 @@ $template = HTML::Template->new(
                                 debug => 0,
                                );
 $template->param(ADJECTIVE => sub { return 'v' . '1e' . '2r' . '3y'; });
-my $output =  $template->output;
+$output =  $template->output;
 $template = HTML::Template->new(
                                 path => ['templates/'],
                                 filename => 'simple.tmpl',
@@ -522,7 +548,8 @@ if ($output =~ /ADJECTIVE/) {
 
 # test URL escapeing
 $template = HTML::Template->new(
-                                filename => 'templates/urlescape.tmpl',
+                                path => 'templates',
+                                filename => 'urlescape.tmpl',
                                 # debug => 1,
                                 # stack_debug => 1,
                                );
@@ -536,7 +563,9 @@ if ($output =~ /[<>"]/) { #"
 }
 
 # test query()
-$template = HTML::Template->new(filename => 'templates/query-test.tmpl',
+$template = HTML::Template->new(
+                                path => 'templates',
+                                filename => 'query-test.tmpl',
                                );
 if ($template->query(name => 'var') ne 'VAR') {
   print STDERR "\$template->query(name => 'var') returned ", $template->query(name => 'var'), "\n";
@@ -564,8 +593,9 @@ if ($template->query(name => ['EXAMPLE_LOOP', 'EXAMPLE_INNER_LOOP']) ne 'LOOP'){
   die "not ok 29\n";
 }
 
+my @result;
 eval {
-  my @result = $template->query(loop => ['EXAMPLE_LOOP', 'BEE']);
+  @result = $template->query(loop => ['EXAMPLE_LOOP', 'BEE']);
 };
 if ($@ !~ /error/) {
   die "not ok 29!", join(', ', $result[0]), ".\n";
@@ -575,10 +605,29 @@ print "ok 29\n";
 
 
 # test query()
-$template = HTML::Template->new(filename => 'templates/query-test2.tmpl',
+$template = HTML::Template->new(                                
+                                path => 'templates',
+                                filename => 'query-test2.tmpl',
                                );
 my %p = map {$_ => 1} $template->query(loop => ['LOOP_FOO', 'LOOP_BAR']);
 unless (exists $p{foo} and exists $p{bar} and exists $p{bash}) {
   die "not ok 30\n";
 }
 print "ok 30\n";
+
+# test global_vars
+
+$template = HTML::Template->new(                                
+                                path => 'templates',
+                                filename => 'globals.tmpl',
+                                global_vars => 1,
+                               );
+$template->param(outer_loop => [{loop => [{'LOCAL' => 'foo'}]}]);
+$template->param(global => 'bar');
+$template->param(hidden_global => 'foo');
+
+$result = $template->output();
+unless ($result =~ /foobar/) {
+  die "not ok 31\n";
+}
+print "ok 31\n";

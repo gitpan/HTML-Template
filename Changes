@@ -140,3 +140,15 @@ Revision history for Perl extension HTML::Template.
       - New Feature: Better error handling with Carp      
       - Bug Fix: URLESCAPE was skipping some important escapes (Simran Gambhir)
       - New FAQ: How can I execute a program from inside my template?
+
+1.8 Sun June 25 12:00:00 2000
+      - New Feature: global_vars option makes outer variables visible
+        inside loops.
+      - Bug Fix: Use File::Spec to construct pathnames.  This means 
+        that HTML::Template should now work on VMS and MacOS.
+        (Larry Moore)
+      - Bug Fix: loop_context_vars were broken in an unusual case
+        (Todd Larason)
+      - Bug Fix: ESCAPE was broken in some cases.
+      - New License: switched to GPL/Artistic hybrid normally used
+        with Perl modules.

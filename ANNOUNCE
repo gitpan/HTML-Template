@@ -1,19 +1,25 @@
-ANNOUNCEMENT: NEW VERSION: HTML::Template 1.7
+ANNOUNCEMENT: NEW VERSION: HTML::Template 1.8
 
 HTML::Template - a Perl module to use HTML Templates
 
 CHANGES
 
-1.7
+1.8 
 
-- New Feature: new method query() enables introspection into loops
-               (Chris Houser)
+- New Feature: global_vars option makes outer variables visible
+  inside loops.
 
-- New Feature: Better error handling with Carp
+- Bug Fix: Use File::Spec to construct pathnames.  This means 
+  that HTML::Template should now work on VMS and MacOS. 
+  (Larry Moore)
 
-- Bug Fix: URLESCAPE was skipping some important escapes (Simran Gambhir)
- 
-- New FAQ: How can I execute a program from inside my template?
+- Bug Fix: loop_context_vars were broken in an unusual case. 
+  (Todd Larason)
+
+- Bug Fix: ESCAPE was broken in some cases.
+
+- New License: switched to GPL/Artistic hybrid normally used
+  with Perl modules.
 
 
 DESCRIPTION
