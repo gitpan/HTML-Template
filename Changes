@@ -83,3 +83,9 @@ Revision history for Perl extension HTML::Template.
           htmltmpl-subscribe@lists.vm.com to join.
         - bug fixes
         - improved docs
+
+1.1 Fri November 05 12:00:00 1999
+        - Lifted requirement that <TMPL_INCLUDE>s be alone on a line
+        - Added "path" option to new() to manipulate search path for 
+          templates.
+        - bug fixes        

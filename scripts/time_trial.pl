@@ -10,8 +10,11 @@ require '../Template.pm';
 # an array of template files to test against and params to fill in
 my %templates = (simple => [
                             '../templates/simple.tmpl',
-                            {}
+                            {}                            
                            ],
+                 include => [
+                             '../templates/include.tmpl'
+                            ],
                  medium => [
                             '../templates/medium.tmpl',
                             {

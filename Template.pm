@@ -1,6 +1,6 @@
 package HTML::Template;
 
-$HTML::Template::VERSION = '1.0';
+$HTML::Template::VERSION = '1.1';
 
 =head1 NAME
 
@@ -48,17 +48,17 @@ My Path is set to /bin;/usr/bin
 
 =head1 DESCRIPTION
 
-This module attempts make using HTML templates simple and natural.  It
+This module attempts to make using HTML templates simple and natural.  It
 extends standard HTML with a few new HTML-esque tags - <TMPL_VAR>,
 <TMPL_LOOP>, <TMPL_INCLUDE>, <TMPL_IF> and <TMPL_ELSE>.  The file
 written with HTML and these new tags is called a template.  It is
 usually saved separate from your script - possibly even created by
 someone else!  Using this module you fill in the values for the
 variables, loops and branches declared in the template.  This allows
-you to seperate design - the HTML - from the data, which you generate
+you to separate design - the HTML - from the data, which you generate
 in the Perl script.
 
-This module is licenced under the GPL.  See the LICENSE section
+This module is licensed under the GPL.  See the LICENSE section
 below for more details.
 
 =head1 MOTIVATION
@@ -235,7 +235,7 @@ example of a param call with one nested loop:
 Basically, each <TMPL_LOOP> gets an array reference.  Inside the array
 are any number of hash references.  These hashes contain the
 name=>value pairs for a single pass over the loop template.  It is
-probably in your best interest to build these up programatically, but
+probably in your best interest to build these up programmatically, but
 that is up to you!
 
 Inside a <TMPL_LOOP>, the only variables that are usable are the ones
@@ -248,6 +248,13 @@ you, a <TMPL_LOOP> introduces a new scope much like a subroutine call.
 This tag includes a template directly into the current template at the
 point where the tag is found.  The included template contents exactly
 as if its contents were physically included in the master template.
+
+The file specified can be a full path - beginning with a '/'.  If it
+isn't a full path, the path to the enclosing file is tried first.
+After that the path in the environment variable HTML_TEMPLATE_ROOT is
+tried next.  Next, the "path" new() option is consulted.  As a final
+attempt, the filename is passed to open() directly.  See below for
+more information on HTML_TEMPLATE_ROOT and the "path" option to new().
 
 NOTE: Currently, each <TMPL_INCLUDE> must be on a seperate line by itself.
 
@@ -280,7 +287,7 @@ that intersecting a <TMPL_IF> and a <TMPL_LOOP> is invalid.
 
 WARNING: Much of the benefit of HTML::Template is in decoupling your
 Perl and HTML.  If you introduce numerous cases where you have
-TMPL_IFs and matching Perl if()s, you will create a maintainance
+TMPL_IFs and matching Perl if()s, you will create a maintenance
 problem in keeping the two synchronized.  I suggest you adopt the
 practice of only using TMPL_IF if you can do so without requiring a
 matching if() in your Perl code.
@@ -311,7 +318,7 @@ Call new() to create a new Template object:
                                       option => 'value' 
                                     );
 
-You must call new() with at least one name => value pair specifing how
+You must call new() with at least one name => value pair specifying how
 to access the template text.  You can use "filename => 'file.tmpl'" to
 specify a filename to be opened as the template.  Alternately you can
 use:
@@ -357,7 +364,8 @@ value of $HTML_TEMPLATE_ROOT.  Example - if the environment variable
 HTML_TEMPLATE_ROOT is set to "/home/sam" and I call
 HTML::Template->new() with filename set to "sam.tmpl", the
 HTML::Template will try to open "/home/sam/sam.tmpl" to access the
-template file.
+template file.  You can also affect the search path for files with the
+"path" option to new() - see below for more information.
 
 You can modify the Template object's behavior with new.  These options
 are available:
@@ -375,7 +383,7 @@ exist in the template body.  Defaults to 1.
 cache - if set to 1 the module will cache in memory the parsed
 templates based on the filename parameter and modification date of the
 file.  This only applies to templates opened with the filename
-parameter specified, not scalarref or arrayref templates.  Cacheing
+parameter specified, not scalarref or arrayref templates.  Caching
 also looks at the modification times of any files included using
 <TMPL_INCLUDE> tags, but again, only if the template is opened with
 filename parameter.  Note that different new() parameter settings do
@@ -388,7 +396,7 @@ performance increase under mod_perl, more if you use large
 =item *
 
 blind_cache - if set to 1 the module behaves exactly as with normal
-cacheing but does not check to see if the file has changed on each
+caching but does not check to see if the file has changed on each
 request.  This option should be used with caution, but could be of use
 on high-load servers.  My tests show blind_cache performing only 1 to
 2 percent faster than cache under mod_perl.
@@ -396,7 +404,7 @@ on high-load servers.  My tests show blind_cache performing only 1 to
 =item *
 
 associate - this option allows you to inherit the parameter values
-from other objects.  The only rwquirement for the other object is that
+from other objects.  The only requirement for the other object is that
 it have a param() method that works like HTML::Template's param().  A
 good candidate would be a CGI.pm query object.  Example:
 
@@ -429,6 +437,23 @@ TMPL_INCLUDE tags, then you can set no_includes to 1.  This will give
 a small performance gain, since the prepass for include tags can be
 skipped.  Defaults to 0.
 
+=item *
+
+path - you can set this variable with a list of paths to search for
+files specified with the "filename" option to new() and for files
+included with the <TMPL_INCLUDE> tag.  This list is only consulted
+when the filename is relative - i.e. does not begin with a '/'.  The
+HTML_TEMPLATE_ROOT environment variable is always tried first if it
+exists.  In the case of a <TMPL_INCLUDE> file, the path to the
+including file is also tried before path is consulted.
+
+Example:
+
+   my $template = HTML::Template->new( filename => 'file.tmpl',
+                                       path => [ '/path/to/templates',
+                                                 '/alternate/path'
+                                               ]
+                                      );
 =item *
 
 vanguard_compatibility_mode - if set to 1 the module will expect to
@@ -496,6 +521,7 @@ sub new {
                vanguard_compatibility_mode => 0,
                no_includes => 0,
                associate => [],
+               path => []
               );
   
   # load in options supplied to new()
@@ -523,6 +549,11 @@ sub new {
   if (ref($options->{associate}) ne 'ARRAY') {
     $options->{associate} = [ $options->{associate} ];
   }
+
+  # path should be an array if it's not already
+  if (ref($options->{path}) ne 'ARRAY') {
+    $options->{path} = [ $options->{path} ];
+  }
   
   # make sure objects in associate area support param()
   foreach my $object (@{$options->{associate}}) {
@@ -546,7 +577,7 @@ sub new {
   return $self;
 }
 
-# an internally used new that recieves its parse_stack and param_map as input
+# an internally used new that receives its parse_stack and param_map as input
 sub _new_from_loop {
   my $pkg = shift;
   my $self; { my %hash; $self = bless(\%hash, $pkg); }
@@ -590,19 +621,12 @@ sub new_scalar_ref {
   my $pkg = shift; return $pkg->new('scalarref', @_);
 }
 
-# initilizes all the object data structures.  Also handles global
-# cacheing of template parse data.
+# initializes all the object data structures.  Also handles global
+# caching of template parse data.
 use vars qw( %CACHE );
 sub _init {
   my $self = shift;
   my $options = $self->{options};
-
-  # deal with $ENV{HTML_TEMPLATE_ROOT} stuff
-  if (defined($options->{filename})) {
-    if (!($options->{filename} =~ /^\//) and exists($ENV{HTML_TEMPLATE_ROOT})) {
-      $options->{filename} = join('/', $ENV{HTML_TEMPLATE_ROOT}, split('/', $options->{filename}));
-    }
-  }
 
   # look in the cache to see if we have a cached copy of this
   # template, note modification time in $mtime if we do.
@@ -614,7 +638,6 @@ sub _init {
     
     if (!$options->{blind_cache}) {
       # make sure it still exists in the filesystem 
-
       (-r $options->{filename}) or die("HTML::Template : template file $options->{filename} does not exist or is unreadable.");    
 
       # get the modification time
@@ -635,8 +658,7 @@ sub _init {
       }
 
       # if the template has includes, check each included file's mtime
-      # and re-call $self->_init if different.  There's no way,
-      # currently, to just re-read one file...
+      # and re-call $self->_init if different.  
       if (exists($CACHE{$options->{filename}}{included_mtimes})) {
         foreach my $filename (keys %{$CACHE{$options->{filename}}{included_mtimes}}) {
           defined($CACHE{$options->{filename}}{included_mtimes}{$filename}) or
@@ -714,19 +736,51 @@ sub _init_template {
   my $options = $self->{options};
 
   if (exists($options->{filename})) {    
-    # check filename param and try to open
-    (-r $options->{filename}) or die("HTML::Template : template file $options->{filename} does not exist or is unreadable.");
+    my $filename = $options->{filename};
+    my $filepath;
 
-    # open the file
-    open(TEMPLATE, $options->{filename}) or die("Unable to open file $options->{filename}");
+    # find the file and open it
+  SEARCH: {            
+      # first check for a full path
+      if ($filename =~ /^\//) {
+        $filepath = $filename;              
+        die "HTML::Template->new() : Cannot open included file $filename : $!"
+          unless defined(open(TEMPLATE, $filepath));              
+        last SEARCH;                             
+      }            
+      
+      # try HTML_TEMPLATE_ROOT if it exists...
+      
+      if (exists($ENV{HTML_TEMPLATE_ROOT})) {
+        $filepath = join('/', split('/', $ENV{HTML_TEMPLATE_ROOT}), $filename);
+        last SEARCH
+          if (defined(open(TEMPLATE, $filepath)));
+      }
+      
+      # try "path" option list..
+      foreach my $path (@{$options->{path}}) {
+        $filepath = join('/', split('/', $path), $filename);
+        last SEARCH
+          if (defined(open(TEMPLATE, $filepath)));
+      }
+
+      # try even a relative path from the current directory...
+      $filepath = $filename;
+      last SEARCH
+        if (defined(open(TEMPLATE, $filepath)));
+
+      die "HTML::Template->new() : Cannot open template file $filename - file does not exist or is unreadable.";
+    }
+    
+    $options->{filename} = $filepath;
 
     # read into the array
     my @templateArray = <TEMPLATE>;
     close(TEMPLATE);
-
+    
     # copy in the ref
     $self->{template} = \@templateArray;
-
+    
   } elsif (exists($options->{scalarref})) {
     # split it into an array by line, preserving \n's on all but the
     # last line
@@ -746,46 +800,6 @@ sub _init_template {
     die("HTML::Template : Need to call new with filename, scalarref or arrayref parameter specified.");
   }
 
-  # look for TMPL_INCLUDEs and process them now
-  use vars qw($line);
-  local(*line);
-  if (!($options->{no_includes})) {
-    for (my $line_number = 0; $line_number <= $#{$self->{template}}; $line_number++) {
-      *line = \$self->{template}[$line_number];
-      defined($line) or next;
-
-      if ($line =~ /^<[tT][mM][pP][lL]_[Ii][Nn][Cc][Ll][Uu][Dd][Ee]\s+(?:[nN][aA][mM][eE]\s*=)?\s*"?([\w\/\.]+)"?\s*>$/x) {
-        my $filename = $1;
-
-        # open the file - prefer the INCLUDE to be under the same root
-        # at the template...
-        my @path = split('/', $options->{filename});
-        $path[$#path] = $filename;
-        if (!defined(open(TEMPLATE, join('/', @path)))) {
-          defined(open(TEMPLATE, $filename)) or
-            die "Cannot open included file $filename - tried $filename and " 
-              . join('/', @path);
-        } else {
-          $filename = join('/', @path);
-        }
-      
-        # read into the array
-        my @templateArray = <TEMPLATE>;
-        close(TEMPLATE);
-
-        if (!scalar(@templateArray)) { next; }
-
-        # collect mtimes for included files
-        if ($options->{cache} and !$options->{blind_cache}) {
-          $self->{included_mtimes}{$filename} = (stat($filename))[9];
-        }
-
-        # move the new lines into place.  
-        splice(@{$self->{template}}, $line_number, 1, @templateArray);
-      }
-    }
-  }
-
   return $self;
 }
 
@@ -798,7 +812,7 @@ sub _parse {
   my $self = shift;
   my $options = $self->{options};
   
-  $options->{debug} and print STDERR "### HTML::Template Debug ### In pre_parse:\n";
+  $options->{debug} and print STDERR "### HTML::Template Debug ### In _parse:\n";
   
   # setup the stacks and maps - they're accessed by typeglobs that
   # reference the top of the stack.  They are masked so that a loop
@@ -832,19 +846,21 @@ sub _parse {
   my @loopstack = ();
 
   # loop through lines, filling up pstack
- LINE: for (my $line_number = 0; $line_number <= $#{$self->{template}}; $line_number++) {
+  my $last_line =  $#{$self->{template}};
+ LINE: for (my $line_number = 0; $line_number <= $last_line; $line_number++) {
     next unless defined $self->{template}[$line_number]; 
     my $line = $self->{template}[$line_number];
 
     # handle the old vanguard format
     $options->{vanguard_compatibility_mode} and 
-      $line =~ s/%([\w]+)%/<TMPL_VAR NAME=$1>/g;
+      $line =~ s/%([-\w\/\.+]+)%/<TMPL_VAR NAME=$1>/g;
 
     # make PASSes over the line until nothing is left
   PASS: while(1) {
       last PASS unless defined($line);
       
       # a general regex to match any and all TMPL_* tags
+
       if ($line =~ /
                     (.*?)
                     (
@@ -857,6 +873,8 @@ sub _parse {
                          (?:[Ii][Ff])
                          |
                          (?:[Ee][Ll][Ss][Ee])
+                         |
+                         (?:[Ii][Nn][Cc][Ll][Uu][Dd][Ee])
                       )
                     )
                     (?:
@@ -878,7 +896,7 @@ sub _parse {
                     \s*
                     "?
                     (
-                     \w+
+                     [-\w\/\.+]+
                     )?
                     "?
                     \s*
@@ -926,7 +944,7 @@ sub _parse {
           next PASS;          
         
         } elsif ($which =~ /^<[tT][mM][pP][lL]_[Ll][Oo][Oo][Pp]/) {
-          # we've got a loop start
+         # we've got a loop start
           $options->{debug} and print STDERR "### HTML::Template Debug ### $line_number : LOOP $name start\n";
 
           defined $escape and 
@@ -998,7 +1016,7 @@ sub _parse {
           my $parse_stack = pop(@pstacks);
           *pstack = $pstacks[$#pstacks];
           
-          scalar(@ifstack) and die "HTML::Template->new() : Dangleing <TMPL_IF> in loop ending at $line_number!";
+          scalar(@ifstack) and die "HTML::Template->new() : Dangling <TMPL_IF> in loop ending at $line_number!";
           pop(@ifstacks);
           *ifstack = $ifstacks[$#ifstack];
           
@@ -1106,7 +1124,7 @@ sub _parse {
 
           # connect the matching to this "address" - thus the if,
           # failing jumps to the ELSE address.  The else then gets
-          # elaborated, and of course succedes.  On the other hand, if
+          # elaborated, and of course succeeds.  On the other hand, if
           # the IF fails and falls though, output will reach the else
           # and jump to the /if address.
           $if->[HTML::Template::IF::JUMP_ADDRESS] = $#pstack;
@@ -1114,6 +1132,93 @@ sub _parse {
           $line = $post;
           next PASS;
 
+        } elsif ($which =~ /^<[Tt][Mm][Pp][Ll]_[Ii][Nn][Cc][Ll][Uu][Dd][Ee]/) {
+          # handle TMPL_INCLUDEs
+          $options->{debug} and print STDERR "### HTML::Template Debug ### $line_number : INCLUDE $name \n";
+
+          defined $name or die "HTML::Template->new() : found TMPL_INCLUDE with no name at $line_number!";
+
+          defined $escape and 
+            die "HTML::Template->new() : Found ESCAPE option in a TMPL_INCLUDE tag at line $line_number.  ESCAPE is only valid for TMPL_VARs.";
+
+          # push text coming before the tag onto the pstack,
+          # concatenating with preceding text if possible.
+          if (ref($pstack[$#pstack]) eq 'SCALAR') {
+            ${$pstack[$#pstack]} .= $pre;
+          } else {
+            push(@pstack, \$pre);
+          }
+
+          my $filename = $name;
+          my $filepath;
+
+          # look for the included file...
+        SEARCH: {            
+            # first check for a full path
+            if ($filename =~ /^\//) {
+              $filepath = $filename;              
+              die "HTML::Template->new() : Cannot open included file $filename : $!"
+                unless defined(open(TEMPLATE, $filepath));              
+              last SEARCH;                             
+            }            
+            
+            # try the path of the enclosing template if it has one
+            if (exists($options->{filename})) {
+              my @path = split('/', $options->{filename});
+              $path[$#path] = $filename;
+              $filepath = join('/', @path);
+              last SEARCH
+                if (defined(open(TEMPLATE, $filepath)));
+            }
+
+            # try HTML_TEMPLATE_ROOT if it exists...
+            if (exists($ENV{HTML_TEMPLATE_ROOT})) {
+              $filepath = join('/', split('/', $ENV{HTML_TEMPLATE_ROOT}), $filename);
+              last SEARCH
+                if (defined(open(TEMPLATE, $filepath)));
+            }
+            
+            # try "path" option list..
+            foreach my $path (@{$options->{path}}) {
+              $filepath = join('/', split('/', $path), $filename);
+              last SEARCH
+                if (defined(open(TEMPLATE, $filepath)));
+            }
+
+            # try even a relative path from the current directory...
+            $filepath = $filename;
+            last SEARCH
+              if (defined(open(TEMPLATE, $filepath)));
+
+            die "HTML::Template->new() : Cannot open included file $filename";
+          }
+      
+          # read into the array
+          my @templateArray = <TEMPLATE>;
+          close(TEMPLATE);
+          
+          $line = $post, next PASS 
+            unless (scalar(@templateArray));
+
+          # collect mtimes for included files
+          if ($options->{cache} and !$options->{blind_cache}) {
+            $self->{included_mtimes}{$filepath} = (stat($filepath))[9];
+          }
+
+          # stick the remains of this line onto the bottom of the
+          # included text.
+          push(@templateArray, $post);
+          
+          # move the new lines into place.  
+          splice(@{$self->{template}}, $line_number, 1, @templateArray);
+          
+          # recalculate stopping point
+          $last_line = $#{$self->{template}};
+          
+          # start in on the first line of the included text - nothing
+          # else to do on this line.
+          $line = $self->{template}[$line_number];
+          next PASS;
         } else {
           # zuh!?
           die "HTML::Template->new() : Unknown or unmatched TMPL construct on line $line_number";
@@ -1266,7 +1371,7 @@ output() returns the final result of the template.  In most situations you'll wa
 
    print $template->output();
 
-When output is called each occurance of <TMPL_VAR NAME=name> is
+When output is called each occurrence of <TMPL_VAR NAME=name> is
 replaced with the value assigned to "name" via param().  If a named
 parameter is unset it is simply replaced with ''.  <TMPL_LOOPS> are
 evaluated once per parameter set, accumlating output on each pass.
@@ -1283,7 +1388,7 @@ sub output {
   my $self = shift;
   my $options = $self->{options};
 
-  $options->{debug} and print STDERR "### HTML::Template Debug ### In output $self\n";
+  $options->{debug} and print STDERR "### HTML::Template Debug ### In output\n";
 
   # want a stack dump?
   if ($options->{debug_stack}) {
@@ -1537,6 +1642,10 @@ instead getting a speed increase, you'll double your memory usage.  To
 find out if this is happening set cache_debug => 1 in your application
 code and look for "CACHE MISS" messages in the logs.
 
+=head2 What characters are allowed in TMPL_* NAMEs?
+
+Numbers, letters, '.', '/', '+', '-' and '_'.
+
 =head1 BUGS
 
 I am aware of no bugs - if you find one, join the mailing list and
@@ -1572,6 +1681,8 @@ provided by:
    David Glasser
    Peter Marelas
    James William Carlson
+   Frank D. Cringle
+   Winfried Koenig
 
 Thanks!
 

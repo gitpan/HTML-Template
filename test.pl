@@ -109,6 +109,7 @@ print "ok 6\n";
 # test a template with TMPL_INCLUDE
 $template = HTML::Template->new(
                                 filename => 'templates/include.tmpl',
+                                # debug => 1
                                );
 $output =  $template->output;
 if (!($output =~ /5/) || !($output =~ /6/)) {

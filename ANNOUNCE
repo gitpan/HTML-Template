@@ -1,4 +1,4 @@
-ANNOUNCEMENT: NEW VERSION: HTML::Template 1.0
+ANNOUNCEMENT: NEW VERSION: HTML::Template 1.1
 
 NAME
 
@@ -6,11 +6,11 @@ HTML::Template - a Perl module to use HTML Templates
 
 CHANGES
 
-1.0
-        - An HTML::Template mailing-list!  Send a blank message to
-          htmltmpl-subscribe@lists.vm.com to join.
-        - bug fixes
-        - improved docs
+1.1 
+        - Lifted requirement that <TMPL_INCLUDE>s be alone on a line
+        - Added "path" option to new() to manipulate search path for 
+          templates.
+        - bug fixes        
 
 
 DESCRIPTION
