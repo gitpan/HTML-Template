@@ -1,6 +1,6 @@
 package HTML::Template;
 
-$HTML::Template::VERSION = '2.1';
+$HTML::Template::VERSION = '2.2';
 
 =head1 NAME
 
@@ -1246,6 +1246,10 @@ sub _fetch_from_file_cache {
         ($mtime != $self->{mtime})) {
       $options->{cache_debug} and 
         print STDERR "### HTML::Template Cache Debug ### FILE CACHE MISS : $filepath : $mtime\n";
+      ($self->{mtime}, 
+       $self->{included_mtimes}, 
+       $self->{param_map}, 
+       $self->{parse_stack}) = (undef, undef, undef, undef);
       return;
     }
 
@@ -1260,7 +1264,10 @@ sub _fetch_from_file_cache {
         if ($included_mtime != $self->{included_mtimes}{$filename}) {
           $options->{cache_debug} and 
             print STDERR "### HTML::Template Cache Debug ### FILE CACHE MISS : $filepath : INCLUDE $filename : $included_mtime\n";
-          
+          ($self->{mtime}, 
+           $self->{included_mtimes}, 
+           $self->{param_map}, 
+           $self->{parse_stack}) = (undef, undef, undef, undef);
           return;
         }
       }
@@ -2182,14 +2189,15 @@ sub _parse {
     }
   }
 
-  # globalize vars?
-  $self->_globalize_vars() if ($options->{global_vars});
-
   # want a stack dump?
   if ($options->{stack_debug}) {
     require 'Data/Dumper.pm';
     print STDERR "### HTML::Template _param Stack Dump ###\n\n", Data::Dumper::Dumper($self->{parse_stack}), "\n";
   }
+
+  # get rid of filters - they cause runtime errors if Storable tries
+  # to store them.  This can happen under global_vars.
+  delete $options->{filter};
 
   # all done with template
   delete $self->{template};
@@ -2207,6 +2215,19 @@ sub _globalize_vars {
   # list.
   push(@_, $self);
   map { $_->_globalize_vars(@_) } 
+    map {values %{$_->[HTML::Template::LOOP::TEMPLATE_HASH]}}
+      grep { ref($_) eq 'HTML::Template::LOOP'} @{$self->{parse_stack}};
+}
+
+# method used to recursively un-hook associate
+sub _unglobalize_vars {
+  my $self = shift;
+  
+  # disassociate
+  $self->{options}{associate} = undef;
+  
+  # recurse down into the template tree disassociating
+  map { $_->_unglobalize_vars() } 
     map {values %{$_->[HTML::Template::LOOP::TEMPLATE_HASH]}}
       grep { ref($_) eq 'HTML::Template::LOOP'} @{$self->{parse_stack}};
 }
@@ -2320,7 +2341,8 @@ sub param {
 
   if (!scalar(@_)) {
     croak("HTML::Template->param() : Single reference arg to param() must be a hash-ref!  You gave me a $type.")
-      unless $type eq 'HASH' or (ref($first) and $first->isa('HASH'));  
+      unless $type eq 'HASH' or 
+        (ref($first) and UNIVERSAL::isa($first, 'HASH'));  
     push(@_, %$first);
   } else {
     unshift(@_, $first);
@@ -2437,6 +2459,10 @@ sub output {
     print STDERR "### HTML::Template output Stack Dump ###\n\n", Data::Dumper::Dumper($self->{parse_stack}), "\n";
   }
 
+  # globalize vars - this happens here to localize the circular
+  # references created by global_vars.
+  $self->_globalize_vars() if ($options->{global_vars});
+
   # support the associate magic, searching for undefined params and
   # attempting to fill them from the associated objects.
   if (scalar(@{$options->{associate}})) {
@@ -2551,6 +2577,9 @@ sub output {
       confess("HTML::Template::output() : Unknown item in parse_stack : " . $type);
     }
   }
+
+  # undo the globalization circular refs
+  $self->_unglobalize_vars() if ($options->{global_vars});
 
   print STDERR "### HTML::Template Memory Debug ### END OUTPUT ", $self->{proc_mem}->size(), "\n"
     if $options->{memory_debug};
@@ -3012,6 +3041,8 @@ provided by:
    Chris Nokleberg
    Ralph Corderoy
    William Ward
+   Ade Olonoh
+   Mark Stosberg
 
 Thanks!
 

@@ -179,3 +179,10 @@ Revision history for Perl extension HTML::Template.
       - Bug Fix: fixed a noisy bug in param() when used with 'associate'
         (William Ward)
       - Doc Fix: broke out FAQ into separate file.
+
+2.2 Sat December 23 12:00:00 2000
+      - Bug Fix: fixed memory leak in global_vars implementation 
+        (Ade Olonoh)
+      - Bug Fix: fixed file_cache not reloading templates on changes
+        (T.J. Mather)
+      - Bug Fix: fixed broken error checking in param() (Mark Stosberg)

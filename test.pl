@@ -718,10 +718,33 @@ if (!exists($ENV{TEST_FILE_CACHE}) or !$ENV{TEST_FILE_CACHE}) {
   if ($output =~ /ADJECTIVE/) {
     die "not ok 36\n";
   } elsif ($output =~ /3y/) {
-    print "ok 36\n";
+    # print "ok 36\n";
   } else {
     die "not ok 36\n";
   }
+
+  $template = HTML::Template->new(filename => 'templates/simple-loop.tmpl',
+                                  filter => {
+                                             sub => sub {
+                                               $x = 1;
+                                             for (@{$_[0]}) {
+                                               $_ = "$x : $_";
+                                               $x++;
+                                             }
+                                             },
+                                             format => 'array',
+                                            },
+                                  file_cache_dir => './blib/temp_cache_dir',
+                                  file_cache => 1,
+                                  global_vars => 1,
+                                 );
+$template->param('ADJECTIVE_LOOP', [ { ADJECTIVE => 'really' }, { ADJECTIVE => 'very' } ] );
+  $output =  $template->output;
+  if ($output !~ /very/) {
+    die "not ok 36\n";
+  }
+  print "ok 36\n";
+
 }
 
 $template = HTML::Template->new(filename => './templates/include_path/a.tmpl');

@@ -1,28 +1,16 @@
-ANNOUNCEMENT: NEW VERSION: HTML::Template 2.1
+ANNOUNCEMENT: NEW VERSION: HTML::Template 2.2
 
 HTML::Template - a Perl module to use HTML Templates
 
 CHANGES
 
-2.1
+2.2
 
-- New Feature: new 'file_cache' and 'double_file_cache' options
-  provide a file based caching method (T.J. Mather)
+- Bug Fix: fixed memory leak in global_vars implementation (Ade Olonoh)
 
-- New Feature: new 'print_to' option for output() allows output() to
-  print to a filehandle as it runs.  (Chris Nokleberg)
+- Bug Fix: fixed file_cache not reloading templates on changes (T.J. Mather)
 
-- New Feature: new 'case_sensitive' option to allow template variable
-  names to be case sensitive. (Matthew Wickline)
-
-- New Feature: new 'filter' option allows pre-parse filtering of
-  template files.
-
-- Bug Fix: added single-quote escaping to HTML escaping code 
-  (Ralph Corderoy)
-
-- Bug Fix: fixed a noisy bug in param() when used with 'associate'
-  (William Ward)
+- Bug Fix: fixed broken error checking in param() (Mark Stosberg)
 
 
 
@@ -51,7 +39,7 @@ AVAILABILITY
 
 This module is available on SourceForge.  Download it at:
 
-  http://download.sourceforge.net/HTML-Template/HTML-Template-2.1.tar.gz
+  http://download.sourceforge.net/HTML-Template/HTML-Template-2.2.tar.gz
 
 The module is also available on CPAN.  You can get it using CPAN.pm or
 go to:
