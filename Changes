@@ -44,3 +44,11 @@ Revision history for Perl extension HTML::Template.
 
 0.051
         - small problem with make test fixed.
+
+0.06 
+        - added associate parameter to new() and obsoleted
+          associate_CGI() (still supported for now)
+        - added support for HTML_TEMPLATE_ROOT environment variable
+        - small performance improvements using typeglobs
+        - added a performance testing script: time_trial.pl
+        

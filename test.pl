@@ -6,7 +6,7 @@
 # Change 1..1 below to 1..last_test_to_print .
 # (It may become useful if the test is moved to ./t subdirectory.)
 
-BEGIN { $| = 1; print "1..8\n"; }
+BEGIN { $| = 1; print "1..9\n"; }
 END {print "not ok 1\n" unless $loaded;}
 use HTML::Template;
 $loaded = 1;
@@ -140,5 +140,24 @@ if (!($output =~ /5/) || !($output =~ /6/)) {
   print "ok 8\n";
 }
 
+# test associate
+my $template_one = HTML::Template->new(
+                                       filename => 'templates/simple.tmpl',                                
+                                      );
+$template_one->param('ADJECTIVE', 'very');
+
+my $template_two = HTML::Template->new (
+                                        filename => 'templates/simple.tmpl',
+                                        associate => $template_one
+                                       );
+
+my $output =  $template_two->output;
+if ($output =~ /ADJECTIVE/) {
+  die "not ok 9\n";
+} elsif ($output =~ /very/) {
+  print "ok 9\n";
+} else {
+  die "not ok 9\n";
+}
 
 

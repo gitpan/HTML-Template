@@ -2,9 +2,9 @@ package HTML::Template;
 
 use strict;
 use vars qw( $VERSION %CACHE );
-$VERSION = 0.051;
+$VERSION = 0.06;
 
-%HTML::Template::CACHE = ();
+%CACHE = ();
 
 =head1 NAME
 
@@ -186,8 +186,9 @@ recommend using it.  Example - "<TMPL_LOOP LOOP_NAME>" is acceptable.
 =head2 <TMPL_INCLUDE NAME="filename.tmpl">
 
 This tag includes a template directly into the current template at the
-point where the tag is found.  The included template contents exactly
-as if its contents were physically included in the master template.
+point where the tag is found.  The included template contents work
+exactly as if its contents were physically included in the master
+template.
 
 The "NAME=" in the tag is optional, although for extensibility's sake I
 recommend using it.  Example - "<TMPL_INCLUDE filename.tmpl>" is
@@ -210,8 +211,7 @@ Call new() to create a new Template object:
 You must call new() with at least one name => value pair specifing how
 
 to access the template text.  You can use "filename => 'file.tmpl'" to
-specify a filename to be opened as the template.  Alternately you can
-use:
+specify a filename to be opened as the template. Alternately you can use:
 
   my $t = HTML::Template->new( scalarref => $ref_to_template_text, 
                                option => 'value' 
@@ -245,9 +245,18 @@ prefer.
 And as a final option, for those that might prefer it, you can call new as:
 
   my $t = HTML::Template->new_file(type => 'filename', 
-                                   source => 'file.tmpl');
+                                   source => 'file.tmpl',
+                                   option => 'value');
 
 Which works for all three of the source types.
+
+If the environment variable HTML_TEMPLATE_ROOT is set and your
+filename doesn't begin with /, then the path will be relative to the
+value of $HTML_TEMPLATE_ROOT.  Example - if the environment variable
+HTML_TEMPLATE_ROOT is set to "/home/sam" and I call
+HTML::Template->new() with filename set to "sam.tmpl", the
+HTML::Template will try to open "/home/sam/sam.tmpl" to access the
+template file.
 
 You can modify the Template object's behavior with new.  These options
 are available:
@@ -276,9 +285,46 @@ also looks at the modification times of any files included using
 filename parameter.  Note that different new() parameter settings do
 not cause a cache refresh, only a change in the modification time of
 the template will trigger a cache refresh.  For most usages this is
-fine.  My simplistic testing shows that setting cache to 1 yields a
-50% performance increase, more if you use large <TMPL_LOOP>s.  Cache
-defaults to 0.
+fine.  My simplistic testing shows that using cache yields a 50%
+performance increase under mod_perl, more if you use large
+<TMPL_LOOP>s.  Cache defaults to 0.
+
+=item *
+
+blind_cache - if set to 1 the module behaves exactly as with normal
+cacheing but does not check to see if the file has changed on each
+request.  This option should be used with caution, but could be of use
+on high-load servers.  My tests show blind_cache performing only 1 to
+2 percent faster than cache.
+
+=item *
+
+associate - this option allows you to inherit the parameter values
+from other objects.  The only rwquirement for the other object is that
+it have a param() method that works like HTML::Template's param().  A
+good candidate would be a CGI.pm query object.  Example:
+
+  my $query = new CGI;
+  my $template = HTML::Template->new(filename => 'template.tmpl',
+                                     associate => $query);
+
+Now, $template->output() will act as though 
+
+  $template->param('FormField', $cgi->param('FormField'));
+
+had been specified for each key/value pair that would be provided by
+the $cgi->param() method.  Parameters you set directly take precedence
+over associated parameters.  
+
+You can specify multiple objects to associate by passing an anonymous
+array to the associate option.  They are searched for parameters in
+the order they appear:
+
+  my $template = HTML::Template->new(filename => 'template.tmpl',
+                                     associate => [$query, $other_obj]);
+
+The old associateCGI() call is still supported, but should be
+considered obsolete.
 
 =item *
 
@@ -311,20 +357,38 @@ sub new {
   $options->{debug} = 0;
   $options->{timing} = 0;
   $options->{cache} = 0;
+  $options->{blind_cache} = 0;
   $options->{cache_debug} = 0;
   $options->{die_on_bad_params} = 1;
   $options->{vanguard_compatibility_mode} = 0;
   $options->{no_includes} = 0;
-
+  $options->{associate} = [];
+  
   # load in options supplied to new()
   for (my $x = 0; $x <= $#_; $x += 2) { 
     defined($_[($x + 1)]) or die "HTML::Template->new() called with odd number of option parameters - should be of the form option => value";
     $options->{lc($_[$x])} = $_[($x + 1)]; 
   }
 
+  # blind_cache = 1 implies cache = 1
+  $options->{blind_cache} and $options->{cache} = 1;
+
+  # associate should be an array of one element if it's not
+  # already an array.
+  if (ref($options->{associate}) ne 'ARRAY') {
+    $options->{associate} = [ $options->{associate} ];
+  }
+  
+  # make sure objects in associate area support param()
+  foreach my $object (@{$options->{associate}}) {
+    defined($object->can('param')) or
+      die "HTML::Template->new called with associate option, containing object of type " . ref($object) . " which lacks a param() method!";
+  } 
+
+
   # handle the "type", "source" parameter format (does anyone use it?)
   if (exists($options->{type})) {
-    (exists($options->{source})) || (die "HTML::Template->new() called with 'type' parameter set, but no 'source'!");
+    exists($options->{source}) or die "HTML::Template->new() called with 'type' parameter set, but no 'source'!";
     $options->{$options->{type}} = $options->{source};
     delete $options->{type};
     delete $options->{source};
@@ -339,8 +403,15 @@ sub new {
     die "HTML::Template->new called with multiple (or no) template sources specified!  A valid call to new() has exactly one filename => 'file' OR exactly one scalarRef => \\\$scalar OR exactly one arrayRef = \\\@array";    
   }
 
+  # deal with $ENV{HTML_TEMPLATE_ROOT} stuff
+  if (defined($options->{filename})) {
+    if (!($options->{filename} =~ /^\//) and exists($ENV{HTML_TEMPLATE_ROOT})) {
+      $options->{filename} = $ENV{HTML_TEMPLATE_ROOT} . '/' . $options->{filename};
+    }
+  }
+
   # Go!
-  ($options->{timing}) && ($self->{timer}{start_time} = (times)[0]);
+  $options->{timing} and $self->{timer}{start_time} = (times)[0];
   
   # initialize data structures
   $self->_init;
@@ -365,42 +436,54 @@ sub _init {
   my $self = shift;
   my $options = $self->{options};
 
+  # initialize the parameter values hash
   $self->{param_values} = {};
 
-  # look in the cache to see if we have a cached copy of this template
-  if ($options->{cache} && (exists($options->{filename})) && 
-      (exists($CACHE{$options->{filename}}))) {
-    (-r $options->{filename}) || die("HTML::Template : template file $options->{filename} does not exist or is unreadable.");    
+  # look in the cache to see if we have a cached copy of this
+  # template, note modification time in $mtime if we do.
+  my $mtime;
+  if ($options->{cache} and 
+      exists($options->{filename}) and 
+      exists($CACHE{$options->{filename}})) {
+    # the cache contains an entry for this filename
     
-    # get the modification time
-    my $mtime = (stat($options->{filename}))[9];
-    ($options->{debug}) && (print "Modify time of $mtime for " . $options->{filename} . "\n");
-    
-    # if the modification time has changed remove the cache entry and
-    # re-call $self->_init
-    if ($mtime != $CACHE{$options->{filename}}{mtime}) {
-      delete($CACHE{$options->{filename}});
+    if (!$options->{blind_cache}) {
+      # make sure it still exists in the filesystem 
+      (-r $options->{filename}) or die("HTML::Template : template file $options->{filename} does not exist or is unreadable.");    
 
-      $options->{cache_debug} and warn "CACHE MISS : $options->{filename} : $mtime";
+      # get the modification time
+      $mtime = (stat($options->{filename}))[9];
+      $options->{debug} and 
+        print "Modify time of $mtime for " . $options->{filename} . "\n";
+      
+      # if the modification time has changed remove the cache entry and
+      # re-call $self->_init
+      if (defined($CACHE{$options->{filename}}{mtime}) and 
+          ($mtime != $CACHE{$options->{filename}}{mtime})) {
+        delete($CACHE{$options->{filename}});
+        
+        $options->{cache_debug} and warn "CACHE MISS : $options->{filename} : $mtime";
+        
+        return $self->_init;
+      }
 
-      return $self->_init;
-    }
-
-    # if the template has includes, check each included file's mtime
-    # and re-call $self->_init if different.  There's no way,
-    # currently, to just re-read one file...
-    if (exists($CACHE{$options->{filename}}{included_mtimes})) {
-      foreach my $filename (keys %{$CACHE{$options->{filename}}{included_mtimes}}) {
-        defined($CACHE{$options->{filename}}{included_mtimes}{$filename}) or next;
-        my $included_mtime = (stat($filename))[9];
-        if ($included_mtime != $CACHE{$options->{filename}}{included_mtimes}{$filename}) {
-          delete($CACHE{$options->{filename}});
-          $options->{cache_debug} and warn "CACHE MISS : $options->{filename} : INCLUDE $filename : $included_mtime";
-          
-          return $self->_init;
+      # if the template has includes, check each included file's mtime
+      # and re-call $self->_init if different.  There's no way,
+      # currently, to just re-read one file...
+      if (exists($CACHE{$options->{filename}}{included_mtimes})) {
+        foreach my $filename (keys %{$CACHE{$options->{filename}}{included_mtimes}}) {
+          defined($CACHE{$options->{filename}}{included_mtimes}{$filename}) or next;
+          my $included_mtime = (stat($filename))[9];
+          if ($included_mtime != $CACHE{$options->{filename}}{included_mtimes}{$filename}) {
+            delete($CACHE{$options->{filename}});
+            $options->{cache_debug} and warn "CACHE MISS : $options->{filename} : INCLUDE $filename : $included_mtime";
+            
+            return $self->_init;
+          }
         }
       }
     }
+
     # else, use the cached values instead of calling _init_template
     # and _pre_parse.
     
@@ -409,30 +492,29 @@ sub _init {
     $self->{template} = $CACHE{$options->{filename}}{template};
     $self->{param_map} = $CACHE{$options->{filename}}{param_map};
     $self->{loop_heap} = $CACHE{$options->{filename}}{loop_heap};
-    (exists($CACHE{$options->{filename}}{included_mtimes})) &&
-      ($self->{included_mtimes} = $CACHE{$options->{filename}}{included_mtimes});
+    exists($CACHE{$options->{filename}}{included_mtimes}) and
+      $self->{included_mtimes} = $CACHE{$options->{filename}}{included_mtimes};
     return $self;
   }
 
   # init the template and parse data
   $self->_init_template;
-  ($options->{timing}) && ($self->{timer}{load_time} = (times)[0]);
+  $options->{timing} and $self->{timer}{load_time} = (times)[0];
   $self->_pre_parse;
-  ($options->{timing}) && ($self->{timer}{parse_time} = (times)[0]);
+  $options->{timing} and $self->{timer}{parse_time} = (times)[0];
 
   # if we're caching, cache the results of _init_template and _pre_parse
   # for future use
-  if ($options->{cache} && (exists($options->{filename}))) {
-    my $mtime = (stat($options->{filename}))[9];
-
+  if ($options->{cache} and exists($options->{filename})) {
     $options->{cache_debug} and warn "CACHE LOAD : $options->{filename} : $mtime";
     
-    $CACHE{$options->{filename}}{mtime} = $mtime;
+    $options->{blind_cache} or
+      $CACHE{$options->{filename}}{mtime} = (stat($options->{filename}))[9];
     $CACHE{$options->{filename}}{template} = $self->{template};
     $CACHE{$options->{filename}}{param_map} = $self->{param_map};
     $CACHE{$options->{filename}}{loop_heap} = $self->{loop_heap};
-    (exists($self->{included_mtimes})) && 
-      ($CACHE{$options->{filename}}{included_mtimes} = $self->{included_mtimes});
+    exists($self->{included_mtimes}) and
+      $CACHE{$options->{filename}}{included_mtimes} = $self->{included_mtimes};
   }
   
   return $self;
@@ -445,10 +527,10 @@ sub _init_template {
 
   if (exists($options->{filename})) {    
     # check filename param and try to open
-    (-r $options->{filename}) || die("HTML::Template : template file $options->{filename} does not exist or is unreadable.");
+    (-r $options->{filename}) or die("HTML::Template : template file $options->{filename} does not exist or is unreadable.");
 
     # open the file
-    open(TEMPLATE, $options->{filename}) || die("Unable to open file $options->{filename}");
+    open(TEMPLATE, $options->{filename}) or die("Unable to open file $options->{filename}");
 
     # read into the array
     my @templateArray = <TEMPLATE>;
@@ -500,7 +582,7 @@ sub _init_template {
         if (!scalar(@templateArray)) { next; }
 
         # collect mtimes for included files
-        if ($options->{cache}) {
+        if ($options->{cache} and !$options->{blind_cache}) {
           $self->{included_mtimes}{$filename} = (stat($filename))[9];
         }
 
@@ -539,16 +621,16 @@ sub _pre_parse {
   my $self = shift;
   my $options = $self->{options};
   
-  ($options->{debug}) && (print "\nIn pre_parse:\n\n");
+  $options->{debug} and print "\nIn pre_parse:\n\n";
 
-  ($options->{timing}) && ($self->{timer}{parse_in} = (times)[0]);
+  $options->{timing} and $self->{timer}{parse_in} = (times)[0];
 
   $self->{param_map} = {};
   $self->{loop_heap} = {};
   
   for (my $line_number = 0; $line_number <= $#{$self->{template}}; $line_number++) {
     my $line = $self->{template}[$line_number];
-    defined($line) || next;
+    defined($line) or next;
     my $done_with_line = 0;
 
     # handle the old vanguard format
@@ -560,31 +642,31 @@ sub _pre_parse {
 
     while(!$done_with_line) {
       # Look for a loop start
-      defined($line) || last;
+      defined($line) or last;
 
       # [tT]... is twice as fast as the 'i' regex option!
       if ($line =~ /(.*?)<[tT][mM][pP][lL]_[lL][oO][oO][pP]\s+([nN][aA][mM][eE]\s*=)?\s*"?(\w+)"?\s*>(.*)/g) {
         my $preloop = $1;
         my $name = lc $3;
         my $chunk = $4;
-        ($options->{debug}) && (print "$line_number : saw loop $name\n");
-        ($options->{timing}) && ($self->{timer}{loop_in} = (times)[0]);      
+        $options->{debug} and print "$line_number : saw loop $name\n";
+        $options->{timing} and $self->{timer}{loop_in} = (times)[0];      
         
         # find the end of the loop
-        my ($loop_body, $leftover, $pos);
+        my ($loop_body_ref, $leftover_ref, $pos);
         for ($pos = $line_number; $pos <= $#{$self->{template}}; $pos++) {
           if ($pos != $line_number) {
             $chunk .= $self->{template}[$pos];
           }
-          ($loop_body, $leftover) = $self->_extractLoop(\$chunk);
-          defined($loop_body) && last;
+          ($loop_body_ref, $leftover_ref) = $self->_extractLoop(\$chunk);
+          defined($loop_body_ref) and last;
         }
-        (defined($loop_body)) || die("HTML::Template : Problem looking for matching </TMPL_LOOP> for <TMPL_LOOP NAME=${name}> : Could not find one!");
-        ($options->{debug}) && (print "Loop $name body: \n$loop_body\n\n");
+        (defined($loop_body_ref)) or die("HTML::Template : Problem looking for matching </TMPL_LOOP> for <TMPL_LOOP NAME=${name}> : Could not find one!");
+        $options->{debug} and print "Loop $name body: \n$$loop_body_ref\n\n";
         
         # store the results
         push(@{$self->{loop_heap}{$name}{spot}}, $line_number);
-        push(@{$self->{loop_heap}{$name}{template_object}}, HTML::Template->new( scalarref => \$loop_body, debug => $options->{debug}, die_on_bad_params => $options->{die_on_bad_params}, no_includes => 1 ));
+        push(@{$self->{loop_heap}{$name}{template_object}}, HTML::Template->new( scalarref => $loop_body_ref, debug => $options->{debug}, die_on_bad_params => $options->{die_on_bad_params}, no_includes => 1));
           
         # if we've got a multiline match we'll need to undef the
         # lines we gobbled for the loop body.
@@ -595,29 +677,32 @@ sub _pre_parse {
         }
         
         # now reform $line to remove loop body
-        $line = $preloop . ' <TMPL_LOOP NAME=' . $name . ' PLACEHOLDER> ' . $leftover;
+        $line = $preloop . ' <TMPL_LOOP NAME=' . $name . ' PLACEHOLDER> ' . $$leftover_ref;
         # donate back the changes
         $self->{template}[$line_number] = $line;
 
         # tick
-        ($options->{timing}) && ($self->{timer}{loop_out} = (times)[0]);      
-        ($options->{timing}) && (warn "Loop $name : find time " . ($self->{timer}{loop_out} - $self->{timer}{loop_in}));
+        if ($options->{timing}) {
+          $self->{timer}{loop_out} = (times)[0];
+          warn "Loop $name : find time " . ($self->{timer}{loop_out} - $self->{timer}{loop_in});
+        }
 
+        # next pass over line
         next;          
       }
 
-      defined($line) || last;
+      defined($line) or last;
       # [tT]... is twice as fast as the 'i' regex option!
       my @names = ($line =~ /<[tT][mM][pP][lL]_[vV][aA][rR]\s+(?:[nN][aA][mM][eE]\s*=)?\s*"?(\w+)"?\s*>/gx);
       foreach my $name (@names) {
         $name = lc($name);
-        (exists($self->{param_map}{$name})) || ($self->{param_map}{$name} = []);
+        exists($self->{param_map}{$name}) or $self->{param_map}{$name} = [];
         push(@{$self->{param_map}{$name}}, $line_number);
         
         # set their value initially to undef
         $self->{param_values}{$name} = undef;
         
-        ($options->{debug}) && (print "$line_number : saw $name\n");
+        $options->{debug} and print "$line_number : saw $name\n";
       }
 
       # all done
@@ -628,37 +713,33 @@ sub _pre_parse {
   return $self;
 }
 
-# returns ($loop_body, $leftover) given a chunk following directly
+# returns (\$loop_body, \$leftover) given a chunk following directly
 # after a <TMPL_LOOP NAME=BLAH> tag.  Returns undef if the block does
 # not contain a valid loop body.
 sub _extractLoop {
-  my ($self, $chunkRef) = @_;
+  my $self = shift;
+
+  use vars qw($chunk);
+  local *chunk = shift;
 
   # a huge speedup on large templates - the loop body extraction regex
   # is really quite slow.
-
   # [tT]... is twice as fast as the 'i' regex option!
-  if (!( $$chunkRef =~ /<\/[Tt][Mm][Pp][Ll]_[Ll][Oo][Oo][Pp]>/s)) {
+  if (!( $chunk =~ /<\/[Tt][Mm][Pp][Ll]_[Ll][Oo][Oo][Pp]>/s)) {
     return undef;
   }
 
-  # try each possible loop body available
-  my ($loop_body, $leftover);
-
   # [tT]... is twice as fast as the 'i' regex option!
-  while (${$chunkRef} =~ /(.+)<\/[Tt][Mm][Pp][Ll]_[Ll][Oo][Oo][Pp]>(.*)/gs) {
-    $loop_body = $1;
-    $leftover = $2;
+  while ($chunk =~ /(.+)<\/[Tt][Mm][Pp][Ll]_[Ll][Oo][Oo][Pp]>(.*)/gs) {
+    my $loop_body = $1;
+    my $leftover = $2;
 
     # if the loop body has an equal number of loop starts and stops
     # then it's a valid loop body!
-
-    # [tT]... is twice as fast as the 'i' regex option!
-    my (@loop_starts) = ($loop_body =~ /(<[tT][mM][pP][lL]_[Ll][Oo][Oo][Pp])/g);
-    my (@loop_stops) = ($loop_body =~ /<(\/[tT][mM][pP][lL]_[Ll][Oo][Oo][Pp])/g);
-    if ($#loop_starts == $#loop_stops) {
+    if (scalar($loop_body =~ /(<[tT][mM][pP][lL]_[Ll][Oo][Oo][Pp])/g) ==
+        scalar($loop_body =~ /(<\/[tT][mM][pP][lL]_[Ll][Oo][Oo][Pp])/g)) {
       # found it!
-      return ($loop_body, $leftover);
+      return (\$loop_body, \$leftover);
     }
   }
   return undef;
@@ -682,10 +763,10 @@ param() can be called in three ways
 3) To set the value of a parameter :
 
       # For simple TMPL_VARs:
-      $self->param('PARAM', 'value');
+      $self->param(PARAM => 'value');
 
       # And TMPL_LOOPs:
-      $self->param('LOOP_PARAM', 
+      $self->param(LOOP_PARAM => 
                    [ 
                     { PARAM => VALUE_FOR_FIRST_PASS, ... }, 
                     { PARAM => VALUE_FOR_SECOND_PASS, ... } 
@@ -705,8 +786,8 @@ sub param {
   } elsif (!defined($value)) {
     $param = lc($param);
     # check for parameter existence 
-    if ($options->{die_on_bad_params} && !exists($self->{param_map}{$param})
-                                    && !exists($self->{loop_heap}{$param})) {
+    if ($options->{die_on_bad_params} and !exists($self->{param_map}{$param})
+                                    and !exists($self->{loop_heap}{$param})) {
       die("HTML::Template : Attempt to set nonexistent parameter $param");
     }
 
@@ -715,8 +796,8 @@ sub param {
   } else {
     $param = lc($param);
     # check that this param exists in the template
-    if ($options->{die_on_bad_params} && !exists($self->{param_map}{$param})
-                                    && !exists($self->{loop_heap}{$param})) {
+    if ($options->{die_on_bad_params} and !exists($self->{param_map}{$param})
+                                    and !exists($self->{loop_heap}{$param})) {
       die("HTML::Template : Attempt to set nonexistent parameter $param");
     }
 
@@ -748,51 +829,16 @@ sub clear_params {
   }
 }
 
-=head2 associateCGI()
 
-associateCGI() "associates" an object created with the CGI.pm standard module
-with the $template object, so that you don't have to make calls like:
-
-    # assume that the current web program is being called from a page
-    # with a form that has an input tag that looks like:
-    # <INPUT TYPE=HIDDEN NAME=FormField VALUE="Hello, World!">
-    $cgi = new CGI;
-    $template->param('FormField', $cgi->param('FormField'));
-
-Instead, you can just do this:
-
-    $cgi = new CGI;
-    $template->associateCGI($cgi);
-
-Now, $template->output() will act as though 
-
-    $template->param('FormField', $cgi->param('FormField'));
-
-had been specified for each key/value pair that would be provided by 
-the $cgi->param() method.
-
-If the $cgi has the 'foo' parameter, and you also chose to declare:
-
-    $template->param('foo', 'bar');
-
-then the 'foo' param declared with $template->param() will take precedence.
-
-Note that, internally, HTML::Template::associateCGI() works with a ref to the
-CGI object passed to it.  So, if you go around modifying parameters in
-the original CGI object, these changes will be reflected in the output that
-HTML::Template::output produces. (Unless, of course, you modify the params
-in the CGI object _after_ calling $template->output()!)
-
-=cut
-
+# obsolete implementation of associate functionality - still supported
 sub associateCGI { 
   my $self = shift;
   my $cgi  = shift;
   
-  (ref($cgi) eq 'CGI') ||
+  (ref($cgi) eq 'CGI') or
     die("Warning! non-CGI object was passed to HTML::Template::associateCGI()!\n");
 
-  $self->{CGI} = $cgi;
+  push(@{$self->{options}{associate}}, $cgi);
   return 1;
 }
 
@@ -818,41 +864,50 @@ sub output {
   my $self = shift;
   my $options = $self->{options};
 
-  ($options->{timing}) && ($self->{timer}{output_in_time} = (times)[0]);
-  ($options->{debug}) && (print "\nIn output\n\n");
+  $options->{timing} and $self->{timer}{output_in_time} = (times)[0];
+  $options->{debug} and print "\nIn output\n\n";
 
   # keep a hash of lines changed in the replace loop
   my %templateChanges;
 
+  # pre-extend to worst case - all lines are keys
+  keys(%templateChanges) = $#{$self->{template}};
+
   # kick off the search and replace loop
   # works by following the param_map for each named param
+  use vars qw($value);
+  local(*value);  
   foreach my $name (keys %{$self->{param_map}}) {
-    my $value = $self->{param_values}{$name};
+    *value = \$self->{param_values}{$name};
 
-    # support the associateCGI() magic.
-    if ( ! $value ) {
-      if ( defined $self->{CGI} ) {
-        $value = $self->{CGI}->param($name);
+    # support the associate magic.
+    if ( ! defined($value) ) {
+      foreach my $associated_object (@{$options->{associate}}) {
+        *value = \$associated_object->param($name);
+        defined($value) and last;
       }
     }
 
-    ($options->{debug} && !defined($value)) && (print "parameter $name not set at output()\n");
-    (defined($value)) || ($value = '');
-    
+    ($options->{debug} and !defined($value) 
+     and print "parameter $name not set at output()\n");
     # visit each spot on the map and do a replace into templateChanges
     foreach my $spot (@{$self->{param_map}{$name}}) {
       defined($templateChanges{$spot}) 
-        || ($templateChanges{$spot} = $self->{template}[$spot]);
-      my $found = ($templateChanges{$spot} =~ s/<tmpl_var\s+(name\s*=)?\s*"?${name}"?\s*>/$value/sgi);
-      ($options->{debug}) && (print "matched $name $found times at $spot\n");
+        or ($templateChanges{$spot} = $self->{template}[$spot]);
+      if (defined($value)) {
+        $templateChanges{$spot} =~ s/<tmpl_var\s+(?:name\s*=)?\s*"?${name}"?\s*>/$value/sgi;
+      } else {
+        $templateChanges{$spot} =~ s/<tmpl_var\s+(?:name\s*=)?\s*"?${name}"?\s*>//sgi;
+      }
     }
   }
+
 
   # handle the loops
   foreach my $name (keys %{$self->{loop_heap}}) {
     my $valueARef = $self->{param_values}{$name};
-    ($options->{debug} && !defined($valueARef)) && (print "parameter $name not set at output()\n");
-    (defined($valueARef)) || ($valueARef = undef);
+    ($options->{debug} and !defined($valueARef)) 
+      and print "parameter $name not set at output()\n";
     
     # visit each spot on the map and do a looping output() on the loop
     # object.  Insert the result into the spot just like a var
@@ -861,7 +916,7 @@ sub output {
       my $spot = $self->{loop_heap}{$name}{spot}[$x];
       my $tobj = $self->{loop_heap}{$name}{template_object}[$x];
       defined($templateChanges{$spot}) 
-        || ($templateChanges{$spot} = $self->{template}[$spot]);
+        or ($templateChanges{$spot} = $self->{template}[$spot]);
       my $loop_output = '';
       foreach my $valueSetRef (@{$valueARef}) {
         # set the parameters for this iteration
@@ -872,8 +927,11 @@ sub output {
         $loop_output .= $tobj->output;
         $tobj->clear_params();
       }
-      my $found = ($templateChanges{$spot} =~ s/<tmpl_loop\s+name\s*=\s*"?${name}"?\s*PLACEHOLDER>/$loop_output/i);
-      ($options->{debug}) && (print "matched loop $name $found times at $spot\n");
+      if (length($loop_output)) {
+        $templateChanges{$spot} =~ s/<tmpl_loop\s+name\s*=\s*"?${name}"?\s*PLACEHOLDER>/$loop_output/i;
+      } else {
+        $templateChanges{$spot} =~ s/<tmpl_loop\s+name\s*=\s*"?${name}"?\s*PLACEHOLDER>//i;
+      }
     }
   }
 
@@ -898,6 +956,9 @@ sub output {
 
   return $result;
 }
+
+  
+  
 
 
 1;

@@ -11,6 +11,7 @@ templates/long_loops.tmpl
 templates/include.tmpl
 templates/included.tmpl
 templates/included2.tmpl
+scripts/time_trial.pl
 README
 LICENSE
 
