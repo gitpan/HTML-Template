@@ -48,8 +48,8 @@ my %templates = (simple => [
 my %options = (
                'no cache' => {},
                'simple cache' => { cache => 1 },
-               'simple cache, no_includes' => { cache => 1, no_includes => 1},
-               'blind cache' => { blind_cache => 1},
+#               'simple cache, no_includes' => { cache => 1, no_includes => 1},
+#               'blind cache' => { blind_cache => 1},
               );
 
 # number of times over each template

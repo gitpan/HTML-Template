@@ -14,6 +14,8 @@ templates/included2.tmpl
 templates/other-loop.tmpl
 templates/if.tmpl
 templates/ifelse.tmpl
+templates/double_loop.tmpl
+templates/escape.tmpl
 scripts/time_trial.pl
 README
 LICENSE

@@ -6,7 +6,7 @@
 # Change 1..1 below to 1..last_test_to_print .
 # (It may become useful if the test is moved to ./t subdirectory.)
 
-BEGIN { $| = 1; print "1..14\n"; }
+BEGIN { $| = 1; print "1..16\n"; }
 END {print "not ok 1\n" unless $loaded;}
 use HTML::Template;
 $loaded = 1;
@@ -238,37 +238,31 @@ if ($output !~ /INSIDE IF/) {
   print "ok 14\n";
 }
 
-# try something a bit larger
+# test a bug involving two loops with the same name
 $template = HTML::Template->new(
-                                filename => 'templates/medium.tmpl',
-                                shared_ipc_cache => 1
+                                filename => 'templates/double_loop.tmpl',
                                );
-$template->param('ALERT', 'I am alert.');
-$template->param('COMPANY_NAME', "MY NAME IS");
-$template->param('COMPANY_ID', "10001");
-$template->param('OFFICE_ID', "10103214");
-$template->param('NAME', 'SAM I AM');
-$template->param('ADDRESS', '101011 North Something Something');
-$template->param('CITY', 'NEW York');
-$template->param('STATE', 'NEw York');
-$template->param('ZIP','10014');
-$template->param('PHONE','212-929-4315');
-$template->param('PHONE2','');
-$template->param('SUBCATEGORIES','kfldjaldsf');
-$template->param('DESCRIPTION',"dsa;kljkldasfjkldsajflkjdsfklfjdsgkfld\nalskdjklajsdlkajfdlkjsfd\n\talksjdklajsfdkljdsf\ndsa;klfjdskfj");
-$template->param('WEBSITE','http://www.assforyou.com/');
-$template->param('INTRANET_URL','http://www.something.com');
-$template->param('REMOVE_BUTTON', "<INPUT TYPE=SUBMIT NAME=command VALUE=\"Remove Office\">");
-$template->param('COMPANY_ADMIN_AREA', "<A HREF=administrator.cgi?office_id=${office_id}&command=manage>Manage Office Administrators</A>");
-$template->param('CASESTUDIES_LIST', "adsfkljdskldszfgfdfdsgdsfgfdshghdmfldkgjfhdskjfhdskjhfkhdsakgagsfjhbvdsaj hsgbf jhfg sajfjdsag ffasfj hfkjhsdkjhdsakjfhkj kjhdsfkjhdskfjhdskjfkjsda kjjsafdkjhds kjds fkj skjh fdskjhfkj kj kjhf kjh sfkjhadsfkj hadskjfhkjhs ajhdsfkj akj fkj kj kj  kkjdsfhk skjhadskfj haskjh fkjsahfkjhsfk ksjfhdkjh sfkjhdskjfhakj shiou weryheuwnjcinuc 3289u4234k 5 i 43iundsinfinafiunai saiufhiudsaf afiuhahfwefna uwhf u auiu uh weiuhfiuh iau huwehiucnaiuncianweciuninc iuaciun iucniunciunweiucniuwnciwe");
-$template->param('NUMBER_OF_CONTACTS', "aksfjdkldsajfkljds");
-$template->param('COUNTRY_SELECTOR', "klajslkjdsafkljds");
-$template->param('LOGO_LINK', "dsfpkjdsfkgljdsfkglj");
-$template->param('PHOTO_LINK', "lsadfjlkfjdsgkljhfgklhasgh");
-
+$template->param('myloop', [
+                            { var => 'first'}, 
+                            { var => 'second' }, 
+                            { var => 'third' }
+                           ]
+                );
 $output = $template->output;
-if ($output =~ /<TMPL_VAR/) {
+if ($output !~ /David/) {
   die "not ok 15\n";
 } else {
   print "ok 15\n";
+}
+
+# test escapeing
+$template = HTML::Template->new(
+                                filename => 'templates/escape.tmpl',
+                               );
+$template->param(STUFF => '<>"');
+$output = $template->output;
+if ($output =~ /[<>"]/) {
+  die "not ok 16\n";
+} else {
+  print "ok 16\n";
 }

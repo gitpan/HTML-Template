@@ -69,3 +69,12 @@ Revision history for Perl extension HTML::Template.
         - *NUMEROUS* bug fixes (David Glasser - Thanks a lot!)
         - new FAQ section in documentation
         - code cleanup and improved comments
+
+0.96 
+        - Added "ESCAPE=1" option to <TMPL_VAR> to HTML-escape
+          variable values.  (Peter Marelas, thanks!)
+        - more bug fixes (David Glasses, James William Carlson - 
+          thanks)
+        - even *more* code cleanup!
+        - new FAQ concerning pre-loading templates and mod_perl.
+
