@@ -16,6 +16,9 @@ templates/if.tmpl
 templates/ifelse.tmpl
 templates/double_loop.tmpl
 templates/escape.tmpl
+templates/unless.tmpl
+templates/recursive.tmpl
+templates/context.tmpl
 scripts/time_trial.pl
 README
 LICENSE

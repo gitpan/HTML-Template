@@ -98,3 +98,13 @@ Revision history for Perl extension HTML::Template.
 
 1.2.1 Wed November 17 12:00:01 1999
         - tiny bug fix
+
+1.3 Fri December 17 12:00:00 1999 
+        - Omnibus regex patch from Matthew Wickline: a faster and more
+          robust parse().
+        - New tag: TMPL_UNLESS, the opposite of TMPL_IF.
+        - Numerous bug fixes: mixed-case filenames in includes,
+          recursive TMPL_INCLUDEs, reporting filename and line number
+          inside included files, better syntax-error detection.
+        - Optional loop context variables - __FIRST__, __LAST__ and
+          __INNER__.

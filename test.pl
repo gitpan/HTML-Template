@@ -6,7 +6,7 @@
 # Change 1..1 below to 1..last_test_to_print .
 # (It may become useful if the test is moved to ./t subdirectory.)
 
-BEGIN { $| = 1; print "1..16\n"; }
+BEGIN { $| = 1; print "1..21\n"; }
 END {print "not ok 1\n" unless $loaded;}
 use HTML::Template;
 $loaded = 1;
@@ -37,6 +37,7 @@ if ($output =~ /ADJECTIVE/) {
 # try something a bit larger
 $template = HTML::Template->new(
                                        filename => 'templates/medium.tmpl',
+                                       # debug => 1,
                                       );
 $template->param('ALERT', 'I am alert.');
 $template->param('COMPANY_NAME', "MY NAME IS");
@@ -69,9 +70,9 @@ if ($output =~ /<TMPL_VAR/) {
 }
 
 # test a simple loop template
-my $template = HTML::Template->new(
+$template = HTML::Template->new(
                                    filename => 'templates/simple-loop.tmpl',
-                                   # debug => 1
+                                   # debug => 1,
                                   );
 $template->param('ADJECTIVE_LOOP', [ { ADJECTIVE => 'really' }, { ADJECTIVE => 'very' } ] );
 
@@ -87,6 +88,7 @@ if ($output =~ /ADJECTIVE_LOOP/) {
 # test a simple loop template
 $template = HTML::Template->new(
                                    filename => 'templates/simple-loop-nonames.tmpl',
+                                   # debug => 1,
                                   );
 $template->param('ADJECTIVE_LOOP', [ { ADJECTIVE => 'really' }, { ADJECTIVE => 'very' } ] );
 
@@ -102,6 +104,7 @@ if ($output =~ /ADJECTIVE_LOOP/) {
 # test a long loop template - mostly here to use timing on.
 $template = HTML::Template->new(
                                 filename => 'templates/long_loops.tmpl',
+                                   # debug => 1,
                                   );
 $output =  $template->output;
 print "ok 6\n";
@@ -109,7 +112,7 @@ print "ok 6\n";
 # test a template with TMPL_INCLUDE
 $template = HTML::Template->new(
                                 filename => 'templates/include.tmpl',
-                                # debug => 1
+                                # debug => 1,
                                );
 $output =  $template->output;
 if (!($output =~ /5/) || !($output =~ /6/)) {
@@ -122,7 +125,8 @@ if (!($output =~ /5/) || !($output =~ /6/)) {
 $template = HTML::Template->new(
                                 filename => 'templates/include.tmpl',
                                 cache => 1,
-                                # cache_debug => 1
+                                # cache_debug => 1,
+                                # debug => 1,
                                );
 $output =  $template->output;
 if (!($output =~ /5/) || !($output =~ /6/)) {
@@ -135,7 +139,8 @@ if (!($output =~ /5/) || !($output =~ /6/)) {
 my $template2 = HTML::Template->new(
                                     filename => 'templates/include.tmpl',
                                     cache => 1,
-                                    # cache_debug => 1
+                                    # cache_debug => 1,
+                                    # debug => 1,
                                    );
 $output =  $template->output;
 if (!($output =~ /5/) || !($output =~ /6/)) {
@@ -147,12 +152,14 @@ if (!($output =~ /5/) || !($output =~ /6/)) {
 # test associate
 my $template_one = HTML::Template->new(
                                        filename => 'templates/simple.tmpl',                                
+                                       # debug => 1,
                                       );
 $template_one->param('ADJECTIVE', 'very');
 
 my $template_two = HTML::Template->new (
                                         filename => 'templates/simple.tmpl',
-                                        associate => $template_one
+                                        associate => $template_one,
+                                        # debug => 1,
                                        );
 
 $output =  $template_two->output;
@@ -167,7 +174,7 @@ if ($output =~ /ADJECTIVE/) {
 # test a simple loop template
 my $template_l = HTML::Template->new(
                                    filename => 'templates/other-loop.tmpl',
-                                     # debug => 1
+                                   # debug => 1,
                                   );
 # $template_l->param('ADJECTIVE_LOOP', [ { ADJECTIVE => 'really' }, { ADJECTIVE => 'very' } ] );
 
@@ -182,7 +189,7 @@ if ($output =~ /INSIDE/) {
 # test a simple if template
 my $template_i = HTML::Template->new(
                                    filename => 'templates/if.tmpl',
-                                     # debug => 1
+                                   # debug => 1,
                                   );
 # $template_l->param('ADJECTIVE_LOOP', [ { ADJECTIVE => 'really' }, { ADJECTIVE => 'very' } ] );
 
@@ -196,7 +203,7 @@ if ($output =~ /INSIDE/) {
 # test a simple if template
 my $template_i2 = HTML::Template->new(
                                    filename => 'templates/if.tmpl',
-                                     # debug => 1
+                                   # debug => 1,
                                   );
 $template_i2->param(BOOL => 1);
 
@@ -211,7 +218,7 @@ if ($output !~ /INSIDE/) {
 # test a simple if/else template
 my $template_ie = HTML::Template->new(
                                    filename => 'templates/ifelse.tmpl',
-                                     # debug => 1
+                                   # debug => 1,
                                   );
 
 $output =  $template_ie->output;
@@ -226,7 +233,7 @@ if ($output !~ /INSIDE ELSE/) {
 # test a simple if/else template
 my $template_ie2 = HTML::Template->new(
                                    filename => 'templates/ifelse.tmpl',
-                                     # debug => 1
+                                   # debug => 1,
                                   );
 $template_ie2->param(BOOL => 1);
 
@@ -242,6 +249,7 @@ if ($output !~ /INSIDE IF/) {
 # test a bug involving two loops with the same name
 $template = HTML::Template->new(
                                 filename => 'templates/double_loop.tmpl',
+                                # debug => 1,
                                );
 $template->param('myloop', [
                             { var => 'first'}, 
@@ -259,8 +267,9 @@ if ($output !~ /David/) {
 # test escapeing
 $template = HTML::Template->new(
                                 filename => 'templates/escape.tmpl',
+                                # debug => 1,
                                );
-$template->param(STUFF => '<>"');
+$template->param(STUFF => '<>"'); #"
 $output = $template->output;
 if ($output =~ /[<>"]/) {
   die "not ok 16\n";
@@ -270,9 +279,9 @@ if ($output =~ /[<>"]/) {
 
 
 # test a simple template, using new param() call format
-my $template = HTML::Template->new(
+$template = HTML::Template->new(
                                    filename => 'templates/simple.tmpl',
-                                   debug => 0
+                                   # debug => 1,
                                   );
 
 $template->param(
@@ -280,7 +289,7 @@ $template->param(
                   'ADJECTIVE' => 'very'
                  }
                 );
-my $output =  $template->output;
+$output =  $template->output;
 if ($output =~ /ADJECTIVE/) {
   die "not ok 2\n";
 } elsif ($output =~ /very/) {
@@ -288,3 +297,76 @@ if ($output =~ /ADJECTIVE/) {
 } else {
   die "not ok 17\n";
 }
+
+# test a recursively including template
+eval {
+  $template = HTML::Template->new(
+                                  filename => 'templates/recursive.tmpl',
+                                 );
+  
+  $output =  $template->output;
+};
+
+if (defined($@) and ($@ =~ /recursive/)) {
+  print "ok 18\n";
+} else {
+  print "not ok 18\n";
+}
+
+# test a template using unless
+$template = HTML::Template->new(
+                                filename => 'templates/unless.tmpl',
+                                # debug => 1
+                               );
+$template->param(BOOL => 1);
+
+$output =  $template->output;
+if ($output =~ /INSIDE UNLESS/) {
+  die "not ok 19\n";
+} elsif ($output !~ /INSIDE ELSE/) {
+  die "not ok 19\n";
+} else {
+  print "ok 19\n";
+}
+
+# test a template using unless
+$template = HTML::Template->new(
+                                filename => 'templates/unless.tmpl',
+                                #debug => 1,
+                                #debug_stack => 1
+                               );
+$template->param(BOOL => 0);
+
+$output =  $template->output;
+if ($output !~ /INSIDE UNLESS/) {
+  die "not ok 20\n";
+} elsif ($output =~ /INSIDE ELSE/) {
+  die "not ok 20\n";
+} else {
+  print "ok 20\n";
+}
+
+
+# test a template using loop_context_vars
+$template = HTML::Template->new(
+                                filename => 'templates/context.tmpl',
+                                loop_context_vars => 1,
+                                #debug => 1,
+                                #debug_stack => 1
+                               );
+$template->param(FRUIT => [
+                           {KIND => 'Apples'},
+                           {KIND => 'Oranges'},
+                           {KIND => 'Brains'},
+                           {KIND => 'Toes'},
+                           {KIND => 'Kiwi'}
+                          ]);
+
+$output =  $template->output;
+if ($output !~ /Apples, Oranges, Brains, Toes, and Kiwi./) {
+  die "not ok 21\n";
+} else {
+  print "ok 21\n";
+}
+
+    

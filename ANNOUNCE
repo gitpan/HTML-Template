@@ -1,4 +1,4 @@
-ANNOUNCEMENT: NEW VERSION: HTML::Template 1.2.1
+ANNOUNCEMENT: NEW VERSION: HTML::Template 1.3
 
 NAME
 
@@ -6,21 +6,24 @@ HTML::Template - a Perl module to use HTML Templates
 
 CHANGES
 
-1.2.1
-        - Added multi-parameter and hash-ref syntax for param() calls.
-        - Added DTD-compliant <!-- TMPL_* --> syntax patch from
-          Matthew Wickline - Thanks!
-        - vanguard_compatibility_mode = 1 implies die_on_bad_params = 0
-        - tiny bug fix
+1.3 
+
+- Omnibus regex patch from Matthew Wickline: a faster and more robust
+  parse().
+- New tag: TMPL_UNLESS, the opposite of TMPL_IF.
+- Numerous bug fixes: mixed-case filenames in includes, recursive
+  TMPL_INCLUDEs, reporting filename and line number inside included
+  files, better syntax-error detection.
+- Optional loop context variables - __FIRST__, __LAST__ and __INNER__.
 
 DESCRIPTION
 
 This module attempts make using HTML templates simple and natural.  It
 extends standard HTML with a few new HTML-esque tags - <TMPL_VAR>,
-<TMPL_LOOP>, <TMPL_INCLUDE>, <TMPL_IF> and <TMPL_ELSE>.  The file
-written with HTML and these new tags is called a template.  It is
-usually saved separate from your script - possibly even created by
-someone else!  Using this module you fill in the values for the
+<TMPL_LOOP>, <TMPL_INCLUDE>, <TMPL_IF>, <TMPL_UNLESS> and <TMPL_ELSE>.
+The file written with HTML and these new tags is called a template.
+It is usually saved separate from your script - possibly even created
+by someone else!  Using this module you fill in the values for the
 variables, loops and branches declared in the template.  This allows
 you to seperate design - the HTML - from the data, which you generate
 in the Perl script.
