@@ -6,7 +6,7 @@
 # Change 1..1 below to 1..last_test_to_print .
 # (It may become useful if the test is moved to ./t subdirectory.)
 
-BEGIN { $| = 1; print "1..23\n"; }
+BEGIN { $| = 1; print "1..28\n"; }
 END {print "not ok 1\n" unless $loaded;}
 use HTML::Template;
 $loaded = 1;
@@ -404,25 +404,58 @@ if ($output =~ /Loop not filled in/) {
 if (!exists($ENV{TEST_SHARED_MEMORY}) or !$ENV{TEST_SHARED_MEMORY}) {
   print "skipped 24 - shared memory cache test.  See README to enable.\n";
 } else {
+  require 'IPC/SharedCache.pm';
   my $template_prime = HTML::Template->new(
-                                           filename => 'templates/simple-loop.tmpl',
+                                           filename => 'simple-loop.tmpl',
+                                           path => ['templates/'],
                                            shared_cache => 1,
-                                           # cache_debug => 1,
-                                    );
+                                           ipc_key => 'TEST',
+                                           #cache_debug => 1,
+                                          );
 
   my $template = HTML::Template->new(
-                                     filename => 'templates/simple-loop.tmpl',
+                                     filename => 'simple-loop.tmpl',
+                                     path => ['templates/'],
                                      shared_cache => 1,
+                                     ipc_key => 'TEST',
+                                     #cache_debug => 1,
                                     );
   $template->param('ADJECTIVE_LOOP', [ { ADJECTIVE => 'really' }, { ADJECTIVE => 'very' } ] );
   $output =  $template->output;
   if ($output =~ /ADJECTIVE_LOOP/) {
     die "not ok 24";
-  } elsif ($output =~ /really.*very/s) {
-    print "ok 24\n";
-  } else {
+  } elsif ($output !~ /really.*very/s) {
     die "not ok 24";
+  } else {
+    print "ok 24.1\n";
   }
+
+   my $template_prime2 = HTML::Template->new(
+                                            filename => 'simple-loop.tmpl',
+                                            path => ['templates/'],
+                                            double_cache => 1,
+                                            ipc_key => 'TEST',
+                                            #cache_debug => 1,
+                                     );
+
+   my $template2 = HTML::Template->new(
+                                      filename => 'simple-loop.tmpl',
+                                      path => ['templates/'],
+                                      double_cache => 1,
+                                      ipc_key => 'TEST',
+                                      #cache_debug => 1,
+                                     );
+   $template->param('ADJECTIVE_LOOP', [ { ADJECTIVE => 'really' }, { ADJECTIVE => 'very' } ] );
+   $output =  $template->output;
+   if ($output =~ /ADJECTIVE_LOOP/) {
+     die "not ok 24";
+   } elsif ($output =~ /really.*very/s) {
+     print "ok 24.2\n";
+   } else {
+     die "not ok 24";
+   }
+
+  IPC::SharedCache::remove('TEST');
 }
 
 # test CGI associate bug    
@@ -461,3 +494,44 @@ if ($output =~ /ADJECTIVE/) {
 } else {
   die "not ok 26\n";
 }
+
+# test cache - non automated, requires turning on debug watching STDERR!
+$template = HTML::Template->new(
+                                path => ['templates/'],
+                                filename => 'simple.tmpl',
+                                cache => 1,
+                                # cache_debug => 1,
+                                debug => 0,
+                               );
+$template->param(ADJECTIVE => sub { return 'v' . '1e' . '2r' . '3y'; });
+my $output =  $template->output;
+$template = HTML::Template->new(
+                                path => ['templates/'],
+                                filename => 'simple.tmpl',
+                                cache => 1,
+                                # cache_debug => 1,
+                                debug => 0,
+                               );
+if ($output =~ /ADJECTIVE/) {
+  die "not ok 27\n";
+} elsif ($output =~ /v1e2r3y/) {
+  print "ok 27\n";
+} else {
+  die "not ok 27\n";
+}
+
+# test URL escapeing
+$template = HTML::Template->new(
+                                filename => 'templates/urlescape.tmpl',
+                                # debug => 1,
+                                # stack_debug => 1,
+                               );
+$template->param(STUFF => '<>"; %FA'); #"
+$output = $template->output;
+if ($output =~ /[<>"]/) { #"
+  print $output;
+  die "not ok 28\n";
+} else {
+  print "ok 28\n";
+}
+

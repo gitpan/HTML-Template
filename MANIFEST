@@ -20,9 +20,9 @@ templates/unless.tmpl
 templates/recursive.tmpl
 templates/context.tmpl
 templates/loop-if.tmpl
+templates/urlescape.tmpl
 scripts/time_trial.pl
 scripts/clean_shm.pl
 README
 LICENSE
 ANNOUNCE
-

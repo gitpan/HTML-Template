@@ -1,6 +1,6 @@
 package HTML::Template;
 
-$HTML::Template::VERSION = '1.5';
+$HTML::Template::VERSION = '1.6';
 
 =head1 NAME
 
@@ -129,25 +129,30 @@ the template is output the <TMPL_VAR> is replaced with the VALUE text
 you specified.  If you don't set a parameter it just gets skipped in
 the output.
 
-Optionally you can use the "ESCAPE=1" option in the tag to indicate
+Optionally you can use the "ESCAPE=HTML" option in the tag to indicate
 that you want the value to be HTML-escaped before being returned from
-output.  This means that the ", <, >, and & characters get translated
-into &quot;, &lt;, &gt; and &amp; respectively.  This is useful when
-you want to use a TMPL_VAR in a context where those characters would
-cause trouble.  Example:
+output (the old ESCAPE=1 syntax is still supported).  This means that
+the ", <, >, and & characters get translated into &quot;, &lt;, &gt;
+and &amp; respectively.  This is useful when you want to use a
+TMPL_VAR in a context where those characters would cause trouble.
+Example:
 
    <INPUT NAME=param TYPE=TEXT VALUE="<TMPL_VAR NAME="param">">
 
 If you called param() with a value like sam"my you'll get in trouble
 with HTML's idea of a double-quote.  On the other hand, if you use
-ESCAPE=1, like this:
+ESCAPE=HTML, like this:
 
-   <INPUT NAME=param TYPE=TEXT VALUE="<TMPL_VAR ESCAPE=1 NAME="param">">
+   <INPUT NAME=param TYPE=TEXT VALUE="<TMPL_VAR ESCAPE=HTML NAME="param">">
 
-You'll get what you wanted no matter what value happens to be passed
-in for param.  You can also write ESCAPE="1" and ESCAPE='1'.
-Substitute a 0 for the 1 and you turn off escaping, which is the
-default anyway.
+You'll get what you wanted no matter what value happens to be passed in for
+param.  You can also write ESCAPE="HTML", ESCAPE='HTML' and ESCAPE='1'.
+Substitute a 0 for the HTML and you turn off escaping, which is the default
+anyway.
+
+There is also the "ESCAPE=URL" option which may be used for VARs that
+populate a URL.  It will do URL escaping, like replacing ' ' with '+'
+and '/' with '%2F'.
 
 =head2 <TMPL_LOOP NAME="LOOP_NAME"> </TMPL_LOOP>
 
@@ -493,6 +498,14 @@ HTML::Template see L<IPC::SharedCache>.
 
 =item *
 
+double_cache - if set to 1 the module will use a combination of
+shared_cache and normal cache mode for the best possible caching.  Of
+course, it also uses the most memory of all the cache modes.  All the
+same ipc_* options that work with shared_cache apply to double_cache
+as well.  By default double_cache is off.
+
+=item *
+
 blind_cache - if set to 1 the module behaves exactly as with normal
 caching but does not check to see if the file has changed on each
 request.  This option should be used with caution, but could be of use
@@ -623,6 +636,12 @@ loads, hits and misses to STDERR.  Defaults to 0.
 
 =item *
 
+shared_cache_debug - if set to 1 the module will turn on the debug
+option in IPC::SharedCache - see L<IPC::SharedCache> for
+details. Defaults to 0.
+
+=item *
+
 memory_debug - if set to 1 the module will send information on cache
 memory usage to STDERR.  Requires the GTop module.  Defaults to 0.
 
@@ -637,8 +656,8 @@ use strict; # and no funny business, either.
 # define accessor constants used to improve readability of array
 # accesses into "objects".
 package HTML::Template::LOOP;
-use constant TEMPLATE_HASH => 0;
-use constant PARAM_SET => 1;
+sub TEMPLATE_HASH { 0; }
+sub PARAM_SET { 1 };
 
 package HTML::Template::COND;
 use constant VARIABLE => 0;
@@ -654,9 +673,10 @@ use constant WHICH_UNLESS => 1;
 # back to the main package scope.
 package HTML::Template;
 
-use vars qw($NOOP $ESCAPE);
+use vars qw($NOOP $ESCAPE $URLESCAPE);
 $NOOP = HTML::Template::NOOP->new();
 $ESCAPE = HTML::Template::ESCAPE->new();
+$URLESCAPE = HTML::Template::URLESCAPE->new();
 
 # open a new template and return an object handle
 sub new {
@@ -672,9 +692,10 @@ sub new {
                debug => 0,
                stack_debug => 0,
                timing => 0,
-               cache => 0,
+               cache => 0,               
                blind_cache => 0,
                cache_debug => 0,
+               shared_cache_debug => 0,
                memory_debug => 0,
                die_on_bad_params => 1,
                vanguard_compatibility_mode => 0,
@@ -684,6 +705,7 @@ sub new {
                loop_context_vars => 0,
                max_includes => 10,
                shared_cache => 0,
+               double_cache => 0,
                ipc_key => 'TMPL',
                ipc_mode => 0666,
                ipc_segment_size => 65536,
@@ -701,6 +723,10 @@ sub new {
 
   # shared_cache = 1 implies cache = 1
   $options->{shared_cache} and $options->{cache} = 1;
+
+  # double_cache is a combination of the two modes.
+  $options->{double_cache} and $options->{cache} = 1;
+  $options->{double_cache} and $options->{shared_cache} = 1;
 
   # vanguard_compatibility_mode implies die_on_bad_params = 0
   $options->{vanguard_compatibility_mode} and 
@@ -767,7 +793,7 @@ sub new {
       ipc_key => $options->{ipc_key},
       load_callback => [\&_load_shared_cache, $self],
       validate_callback => [\&_validate_shared_cache, $self],
-      debug => 0,
+      debug => $options->{shared_cache_debug},
       ipc_mode => $options->{ipc_mode},
       max_size => $options->{ipc_max_size},
       ipc_segment_size => $options->{ipc_segment_size};
@@ -843,7 +869,18 @@ sub _init {
   my $self = shift;
   my $options = $self->{options};
 
-  if ($options->{cache} and $options->{shared_cache}) {
+  if ($options->{double_cache}) {
+    # try the normal cache, return if we have it.
+    $self->_fetch_from_cache();
+    return if (defined $self->{param_map} and defined $self->{parse_stack});
+
+    # try the shared cache
+    $self->_fetch_from_shared_cache();
+
+    # put it in the local cache if we got it.
+    $self->_commit_to_cache()
+      if (defined $self->{param_map} and defined $self->{parse_stack});
+  } elsif ($options->{shared_cache}) {
     # try the shared cache
     $self->_fetch_from_shared_cache();
   } elsif ($options->{cache}) {
@@ -861,8 +898,9 @@ sub _init {
 
   # now that we have a full init, cache the structures if cacheing is
   # on.  shared cache is already cool.
-  $self->_commit_to_cache() if ($options->{cache} 
-                                and not $options->{shared_cache});
+  $self->_commit_to_cache() if (($options->{cache}
+                                and not $options->{shared_cache}) or
+                                ($options->{double_cache}));
 }
 
 # Caching subroutines - they handle getting and validating cache
@@ -875,31 +913,35 @@ sub _fetch_from_cache {
   my $options = $self->{options};
   
   # return if there's no cache entry for this filename
-  return unless (exists $options->{filename} and
-                 exists $CACHE{$options->{filename}});
+  return unless exists($options->{filename});
+  my $filepath = $self->_find_file($options->{filename});
+  return unless (defined($filepath) and
+                 exists $CACHE{$filepath});
   
+  $options->{filepath} = $filepath;
+
   # validate the cache
-  my $mtime = $self->_mtime();  
+  my $mtime = $self->_mtime($filepath);  
   if (defined $mtime) {
     # return if the mtime doesn't match the cache
-    if (defined($CACHE{$options->{filename}}{mtime}) and 
-        ($mtime != $CACHE{$options->{filename}}{mtime})) {
+    if (defined($CACHE{$filepath}{mtime}) and 
+        ($mtime != $CACHE{$filepath}{mtime})) {
       $options->{cache_debug} and 
-        print STDERR "CACHE MISS : $options->{filename} : $mtime\n";
+        print STDERR "CACHE MISS : $filepath : $mtime\n";
       return;
     }
 
     # if the template has includes, check each included file's mtime
     # and return if different
-    if (exists($CACHE{$options->{filename}}{included_mtimes})) {
-      foreach my $filename (keys %{$CACHE{$options->{filename}}{included_mtimes}}) {
+    if (exists($CACHE{$filepath}{included_mtimes})) {
+      foreach my $filename (keys %{$CACHE{$filepath}{included_mtimes}}) {
         next unless 
-          defined($CACHE{$options->{filename}}{included_mtimes}{$filename});
+          defined($CACHE{$filepath}{included_mtimes}{$filename});
         
         my $included_mtime = (stat($filename))[9];
-        if ($included_mtime != $CACHE{$options->{filename}}{included_mtimes}{$filename}) {
+        if ($included_mtime != $CACHE{$filepath}{included_mtimes}{$filename}) {
           $options->{cache_debug} and 
-            print STDERR "### HTML::Template Cache Debug ### CACHE MISS : $options->{filename} : INCLUDE $filename : $included_mtime\n";
+            print STDERR "### HTML::Template Cache Debug ### CACHE MISS : $filepath : INCLUDE $filename : $included_mtime\n";
           
           return;
         }
@@ -909,12 +951,12 @@ sub _fetch_from_cache {
 
   # got a cache hit!
   
-  $options->{cache_debug} and print STDERR "### HTML::Template Cache Debug ### CACHE HIT : $options->{filename}\n";
+  $options->{cache_debug} and print STDERR "### HTML::Template Cache Debug ### CACHE HIT : $filepath\n";
       
-  $self->{param_map} = $CACHE{$options->{filename}}{param_map};
-  $self->{parse_stack} = $CACHE{$options->{filename}}{parse_stack};
-  exists($CACHE{$options->{filename}}{included_mtimes}) and
-    $self->{included_mtimes} = $CACHE{$options->{filename}}{included_mtimes};
+  $self->{param_map} = $CACHE{$filepath}{param_map};
+  $self->{parse_stack} = $CACHE{$filepath}{parse_stack};
+  exists($CACHE{$filepath}{included_mtimes}) and
+    $self->{included_mtimes} = $CACHE{$filepath}{included_mtimes};
 
   # clear out values from param_map from last run
   $self->_normalize_options();
@@ -925,14 +967,22 @@ sub _commit_to_cache {
   my $self = shift;
   my $options = $self->{options};
 
-  $options->{cache_debug} and print STDERR "### HTML::Template Cache Debug ### CACHE LOAD : $options->{filename}\n";
+  my $filepath = $options->{filepath};
+  if (not defined $filepath) {
+    $filepath = $self->_find_file($options->{filename});
+    die "HTML::Template->new() : Cannot open included file $options->{filename} : file not found."
+      unless defined($filepath);
+    $options->{filepath} = $filepath;   
+  }
+
+  $options->{cache_debug} and print STDERR "### HTML::Template Cache Debug ### CACHE LOAD : $filepath\n";
     
   $options->{blind_cache} or
-    $CACHE{$options->{filename}}{mtime} = $self->_mtime;
-  $CACHE{$options->{filename}}{param_map} = $self->{param_map};
-  $CACHE{$options->{filename}}{parse_stack} = $self->{parse_stack};
+    $CACHE{$filepath}{mtime} = $self->_mtime($filepath);
+  $CACHE{$filepath}{param_map} = $self->{param_map};
+  $CACHE{$filepath}{parse_stack} = $self->{parse_stack};
   exists($self->{included_mtimes}) and
-    $CACHE{$options->{filename}}{included_mtimes} = $self->{included_mtimes};
+    $CACHE{$filepath}{included_mtimes} = $self->{included_mtimes};
 }
 
 # Shared cache routines.
@@ -940,18 +990,19 @@ sub _fetch_from_shared_cache {
   my $self = shift;
   my $options = $self->{options};
 
-  return unless (exists($options->{filename}));
+  my $filepath = $self->_find_file($options->{filename});
+  return unless defined $filepath;
 
   # fetch from the shared cache.
-  $self->{record} = $self->{cache}{$options->{filename}};
-
+  $self->{record} = $self->{cache}{$filepath};
+  
   ($self->{mtime}, 
    $self->{included_mtimes}, 
    $self->{param_map}, 
    $self->{parse_stack}) = @{$self->{record}}
      if defined($self->{record});
   
-  $options->{cache_debug} and defined($self->{record}) and print STDERR "### HTML::Template Cache Debug ### CACHE HIT : $options->{filename}\n";
+  $options->{cache_debug} and defined($self->{record}) and print STDERR "### HTML::Template Cache Debug ### CACHE HIT : $filepath\n";
   # clear out values from param_map from last run
   $self->_normalize_options(), $self->clear_params()
     if (defined($self->{record}));
@@ -964,12 +1015,14 @@ sub _validate_shared_cache {
   my ($self, $filename, $record) = @_;
   my $options = $self->{options};
 
+  $options->{shared_cache_debug} and print STDERR "### HTML::Template Cache Debug ### SHARED CACHE VALIDATE : $filename\n";
+
   return 1 if $options->{blind_cache};
 
   my ($c_mtime, $included_mtimes, $param_map, $parse_stack) = @$record;
 
   # if the modification time has changed return false
-  my $mtime = $self->_mtime();
+  my $mtime = $self->_mtime($filename);
   if (defined $mtime and defined $c_mtime
       and $mtime != $c_mtime) {
     $options->{cache_debug} and 
@@ -998,12 +1051,12 @@ sub _load_shared_cache {
   my ($self, $filename) = @_;
   my $options = $self->{options};
   my $cache = $self->{cache};
-
-  $options->{cache_debug} and print STDERR "### HTML::Template Cache Debug ### SHARED CACHE LOAD : $options->{filename}\n";
-
+  
   $self->_init_template();
   $self->_parse();
 
+  $options->{cache_debug} and print STDERR "### HTML::Template Cache Debug ### SHARED CACHE LOAD : $options->{filepath}\n";
+  
   print STDERR "### HTML::Template Memory Debug ### END CACHE LOAD ", $self->{proc_mem}->size(), "\n"
     if $options->{memory_debug};
 
@@ -1013,18 +1066,54 @@ sub _load_shared_cache {
            $self->{parse_stack} ]; 
 }
 
-# utility function - computes the mtime for $options->{filename}
+# utility function - given a filename performs documented search and
+# returns a full path of undef if the file cannot be found.
+sub _find_file {
+  my ($self, $filename, $extra_path) = @_;
+  my $options = $self->{options};
+  my $filepath;
+
+  # first check for a full path
+  return $filename 
+      if (($filename =~ /^\//) and (-e $filename));
+
+  # try the extra_path if one was specified
+  if (defined($extra_path)) {
+    $extra_path->[$#{$extra_path}] = $filename;
+    $filepath = join('/', @$extra_path);
+    return $filepath if -e $filepath;
+  }
+
+  # try pre-prending HTML_Template_Root
+  if (exists($ENV{HTML_TEMPLATE_ROOT})) {
+    $filepath = join('/', split(/\/+/, $ENV{HTML_TEMPLATE_ROOT}), $filename);
+    return $filepath if -e $filepath;
+  }
+
+  # try "path" option list..
+  foreach my $path (@{$options->{path}}) {
+    $filepath = join('/', split(/\/+/, $path), $filename);
+    return $filepath if -e $filepath;
+  }
+
+  # try even a relative path from the current directory...
+  return $filename if -e $filename;
+  
+  return undef;
+}
+
+# utility function - computes the mtime for $filename
 sub _mtime {
-  my $self = shift;
+  my ($self, $filepath) = @_;
   my $options = $self->{options};
   
   return(undef) if ($options->{blind_cache});
 
   # make sure it still exists in the filesystem 
-  (-r $options->{filename}) or die("HTML::Template : template file $options->{filename} does not exist or is unreadable.");    
+  (-r $filepath) or Carp::confess("HTML::Template : template file $filepath does not exist or is unreadable.");
   
   # get the modification time
-  return (stat($options->{filename}))[9];
+  return (stat(_))[9];
 }
 
 # utility function - enforces new() options across LOOPs that have
@@ -1058,49 +1147,22 @@ sub _init_template {
     if $options->{memory_debug};
 
   if (exists($options->{filename})) {    
-    my $filename = $options->{filename};
-    my $filepath;
-
-    # find the file and open it
-  SEARCH: {            
-      # first check for a full path
-      if ($filename =~ /^\//) {
-        $filepath = $filename;              
-        die "HTML::Template->new() : Cannot open included file $filename : $!"
-          unless defined(open(TEMPLATE, $filepath));              
-        last SEARCH;                             
-      }            
-      
-      # try HTML_TEMPLATE_ROOT if it exists...      
-      if (exists($ENV{HTML_TEMPLATE_ROOT})) {
-        $filepath = join('/', split('/', $ENV{HTML_TEMPLATE_ROOT}), $filename);
-        last SEARCH
-          if (defined(open(TEMPLATE, $filepath)));
-      }
-      
-      # try "path" option list..
-      foreach my $path (@{$options->{path}}) {
-        $filepath = join('/', split('/', $path), $filename);
-        last SEARCH
-          if (defined(open(TEMPLATE, $filepath)));
-      }
-
-      # try even a relative path from the current directory...
-      $filepath = $filename;
-      last SEARCH
-        if (defined(open(TEMPLATE, $filepath)));
-
-      die "HTML::Template->new() : Cannot open template file $filename - file does not exist or is unreadable.";
+    my $filepath = $options->{filepath};
+    if (not defined $filepath) {
+      $filepath = $self->_find_file($options->{filename});
+      die "HTML::Template->new() : Cannot open included file $options->{filename} : file not found."
+        unless defined($filepath);
+      # we'll need this for future reference - to call stat() for example.
+      $options->{filepath} = $filepath;   
     }
-
-    # we'll need this for future reference - to call stat() for example.
-    $options->{filename} = $filepath;
+    die "HTML::Template->new() : Cannot open included file $options->{filename} : $!"
+      unless defined(open(TEMPLATE, $filepath));
     
     # read into the array, note the mtime for the record
-    $self->{mtime} = $self->_mtime;
+    $self->{mtime} = $self->_mtime($filepath);
     my @templateArray = <TEMPLATE>;
     close(TEMPLATE);
-    
+  
     # copy in the ref
     $self->{template} = \@templateArray;
     
@@ -1251,11 +1313,18 @@ sub _parse {
                     (?:
                       [Ee][Ss][Cc][Aa][Pp][Ee]
                       \s*=\s*
-                        (?:
-                           ( 0 | (?:"0") | (?:'0') ) # $3 => ESCAPE off
-                           |
-                           ( 1 | (?:"1") | (?:'1') ) # $4 => ESCAPE on
-                        )
+                      (?:
+                         ( 0 | (?:"0") | (?:'0') ) # $3 => ESCAPE off
+                         |
+                         ( 1 | (?:"1") | (?:'1') | 
+                           (?:[Hh][Tt][Mm][Ll]) | 
+                           (?:"[Hh][Tt][Mm][Ll]") |
+                           (?:'[Hh][Tt][Mm][Ll]') |
+                           (?:[Uu][Rr][Ll]) | 
+                           (?:"[Uu][Rr][Ll]") |
+                           (?:'[Uu][Rr][Ll]') |
+                         )                         # $4 => ESCAPE on
+                       )
                     )* # allow multiple ESCAPEs
 
                     \s*
@@ -1281,11 +1350,18 @@ sub _parse {
                     (?:
                       [Ee][Ss][Cc][Aa][Pp][Ee]
                       \s*=\s*
-                        (?:
-                           ( 0 | (?:"0") | (?:'0') ) # $8 => ESCAPE off
-                           |
-                           ( 1 | (?:"1") | (?:'1') ) # $9 => ESCAPE on
-                        )
+                      (?:
+                         ( 0 | (?:"0") | (?:'0') ) # $8 => ESCAPE off
+                         |
+                         ( 1 | (?:"1") | (?:'1') | 
+                           (?:[Hh][Tt][Mm][Ll]) | 
+                           (?:"[Hh][Tt][Mm][Ll]") |
+                           (?:'[Hh][Tt][Mm][Ll]') |
+                           (?:[Uu][Rr][Ll]) | 
+                           (?:"[Uu][Rr][Ll]") |
+                           (?:'[Uu][Rr][Ll]') |
+                         )                         # $9 => ESCAPE on
+                       )
                     )* # allow multiple ESCAPEs
 
                     \s*
@@ -1298,9 +1374,9 @@ sub _parse {
 
         $which = uc($2); # which tag is it
 
-        $escape = 0;
-        $escape = 1 if $4 || $9; # ESCAPE=1
+        $escape = $4 || $9;
         $escape = 0 if $3 || $8; # ESCAPE=0 
+        $escape = 0 unless defined($escape);
 
         # what name for the tag?  undef for a /tag at most, one of the
         # following three will be defined
@@ -1346,8 +1422,10 @@ sub _parse {
 
           # if ESCAPE was set, push an ESCAPE op on the stack before
           # the variable.  output will handle the actual work.
-          $escape and
-            push(@pstack, HTML::Template::ESCAPE->new());
+          push(@pstack, $ESCAPE)
+            if ($escape and length($escape) == 4);
+          push(@pstack, $URLESCAPE)
+            if ($escape and length($escape) == 3);
           
           push(@pstack, $var);
 
@@ -1604,48 +1682,14 @@ sub _parse {
           }
 
           my $filename = $name;
-          my $filepath;
 
           # look for the included file...
-        SEARCH: {            
-            # first check for a full path
-            if ($filename =~ /^\//) {
-              $filepath = $filename;              
-              die "HTML::Template->new() : Cannot open included file $filename : $!"
-                unless defined(open(TEMPLATE, $filepath));              
-              last SEARCH;                             
-            }            
-            
-            # try the path of the enclosing template if it has one
-            if (exists($options->{filename})) {
-              my @path = split('/', $options->{filename});
-              $path[$#path] = $filename;
-              $filepath = join('/', @path);
-              last SEARCH
-                if (defined(open(TEMPLATE, $filepath)));
-            }
-
-            # try HTML_TEMPLATE_ROOT if it exists...
-            if (exists($ENV{HTML_TEMPLATE_ROOT})) {
-              $filepath = join('/', split('/', $ENV{HTML_TEMPLATE_ROOT}), $filename);
-              last SEARCH
-                if (defined(open(TEMPLATE, $filepath)));
-            }
-            
-            # try "path" option list..
-            foreach my $path (@{$options->{path}}) {
-              $filepath = join('/', split('/', $path), $filename);
-              last SEARCH
-                if (defined(open(TEMPLATE, $filepath)));
-            }
-
-            # try even a relative path from the current directory...
-            $filepath = $filename;
-            last SEARCH
-              if (defined(open(TEMPLATE, $filepath)));
-
-            die "HTML::Template->new() : Cannot open included file $filename";
-          }
+          my @path = split('/', $options->{filepath});
+          my $filepath = $self->_find_file($filename, \@path);
+          die "HTML::Template->new() : Cannot open included file $filename : file not found."
+            unless defined($filepath);
+          die "HTML::Template->new() : Cannot open included file $filename : $!"
+            unless defined(open(TEMPLATE, $filepath));              
       
           # read into the array
           my @templateArray = <TEMPLATE>;
@@ -1841,7 +1885,7 @@ sub param {
 
   if (!scalar(@_)) {
     die "HTML::Template->param() : Single reference arg to param() must be a hash-ref!  You gave me a $type." 
-      unless $type eq 'HASH';  
+      unless $type eq 'HASH' or (ref($first) and $first->isa('HASH'));  
     push(@_, %$first);
   } else {
     unshift(@_, $first);
@@ -1865,9 +1909,10 @@ sub param {
     # them...
     next unless (exists($param_map->{$param}));
     
-    # copy in contents of ARRAY refs to prevent confusion - 
-    # thanks Richard!
-    if ( ref($value) eq 'ARRAY' ) {
+    # figure out what we've got, taking special care to allow for
+    # objects that are compatible underneath.
+    my $value_type = ref($value);
+    if (defined($value_type) and length($value_type) and ($value_type eq 'ARRAY' or ((ref($value) !~ /^(CODE)|(HASH)|(SCALAR)$/) and $value->isa('ARRAY')))) {
       (ref($param_map->{$param}) eq 'HTML::Template::LOOP') or
         die "HTML::Template::param() : attempt to set parameter $param with an array ref - parameter is not a TMPL_LOOP!";
       $param_map->{$param}[HTML::Template::LOOP::PARAM_SET] = [@{$value}];
@@ -1926,7 +1971,7 @@ important for the internal implementation of loops.
 
 =cut
 
-
+use vars qw(%URLESCAPE_MAP);
 sub output {
   my $self = shift;
   my $options = $self->{options};
@@ -2014,16 +2059,29 @@ sub output {
       *line = \$parse_stack[$x];
       if (defined($$line)) {
         my $toencode = $$line;
-
+        
         # straight from the CGI.pm bible.
         $toencode=~s/&/&amp;/g;
         $toencode=~s/\"/&quot;/g; #"
         $toencode=~s/>/&gt;/g;
         $toencode=~s/</&lt;/g;
-
+        
         $result .= $toencode;
       }
       next;
+    } elsif ($type eq 'HTML::Template::URLESCAPE') {
+      $x++;
+      *line = \$parse_stack[$x];
+      if (defined($$line)) {
+        my $toencode = $$line;
+        # Build a char->hex map if one isn't already available
+        unless (exists($URLESCAPE_MAP{chr(1)})) {
+          for (0..255) { $URLESCAPE_MAP{chr($_)} = sprintf('%%%02X', $_); }
+        }
+        # do the translation (RFC 2396 ^uric)
+	$toencode =~ s/([^;\/?:@&=+\$,A-Za-z0-9\-_.!~*'()])/$URLESCAPE_MAP{$1}/g;
+        $result .= $toencode;
+      }
     } else {
       die "HTML::Template::output() : Unknown item in parse_stack : " . $type;
     }
@@ -2104,6 +2162,14 @@ sub new {
 }
 
 package HTML::Template::ESCAPE;
+sub new {
+  my $unused;
+  my $self = \$unused;
+  bless($self, $_[0]);
+  return $self;
+}
+
+package HTML::Template::URLESCAPE;
 sub new {
   my $unused;
   my $self = \$unused;
@@ -2241,6 +2307,9 @@ provided by:
    Winfried Koenig
    Matthew Wickline
    Doug Steinwand
+   Drew Taylor
+   Tobias Brox
+   Michael Lloyd
 
 Thanks!
 

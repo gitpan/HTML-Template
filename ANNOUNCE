@@ -1,16 +1,20 @@
-ANNOUNCEMENT: NEW VERSION: HTML::Template 1.5
+ANNOUNCEMENT: NEW VERSION: HTML::Template 1.6
 
 HTML::Template - a Perl module to use HTML Templates
 
 CHANGES
 
-1.5
+1.6 
 
-- Shared memory cache now uses IPC::SharedCache - it is ready for
-  mainstream use.  
-- New Feature: param() accepts subroutine refs for TMPL_VARs.
-- Bug Fix: mixed case associated CGI.pm parameters now work properly.
+- New Feature: double_cache combines shared memory and local memory
+  caching for twice the speedup!
 
+- New Feature: ESCAPE=URL does URL-style escaping (added by Tobias Brox)
+
+- Bug Fix: allow for blessed objects in calls to param()
+        (thanks to Michael Lloyd and David Glasser)
+
+- Bug Fix: _mtime was broken in 1.5, fixed a typo.
 
 DESCRIPTION
 
@@ -32,7 +36,7 @@ AVAILABILITY
 
 This module is available on SourceForge.  Download it at:
 
-  http://download.sourceforge.net/HTML-Template/HTML-Template-1.5.tar.gz
+  http://download.sourceforge.net/HTML-Template/HTML-Template-1.6.tar.gz
 
 The module is also available on CPAN.  You can get it using CPAN.pm or
 go to:
