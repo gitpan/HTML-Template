@@ -90,8 +90,11 @@ Revision history for Perl extension HTML::Template.
           templates.
         - bug fixes        
 
-1.2 Wed November 17 12:00:00 1990
+1.2 Wed November 17 12:00:00 1999
         - Added multi-parameter and hash-ref syntax for param() calls.
         - Added DTD-compliant <!-- TMPL_* --> syntax patch from
           Matthew Wickline - Thanks!
         - vanguard_compatibility_mode = 1 implies die_on_bad_params = 0
+
+1.2.1 Wed November 17 12:00:01 1999
+        - tiny bug fix

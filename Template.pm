@@ -1,6 +1,6 @@
 package HTML::Template;
 
-$HTML::Template::VERSION = '1.2';
+$HTML::Template::VERSION = '1.2.1';
 
 =head1 NAME
 
@@ -1345,7 +1345,6 @@ sub param {
   my $self = shift;
   my $options = $self->{options};
   my $param_map = $self->{param_map};
-  my $type;
 
   # the no-parameter case - return list of parameters in the template.
   return keys(%{$param_map}) unless scalar(@_);
