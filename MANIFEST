@@ -1,0 +1,13 @@
+Changes
+MANIFEST
+Makefile.PL
+Template.pm
+test.pl
+templates/simple.tmpl
+templates/simple-loop.tmpl
+templates/medium.tmpl
+templates/simple-loop-nonames.tmpl
+templates/long_loops.tmpl
+README
+LICENCE
+

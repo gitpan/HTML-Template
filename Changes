@@ -1,0 +1,37 @@
+Revision history for Perl extension HTML::Template.
+
+0.00  Fri May 14 14:59:06 1999
+	- original version; created by h2xs 1.18
+
+0.01  Mon May 17 15:17:00 1999
+        - added cacheing to module and perldoc
+        - moved .tmpl files used by 'make test' to /templates
+        - first release!
+
+0.02  Mon May 31 12:47:00 1999
+        - die on multiple source parameters in new()
+        - tries to preserve newlines in loop body
+        - copies in array contents from array refs on param call
+          i.e. allows for reuse of scratch arrays on calling side
+        - Added a CREDITS section to the docs, inaugurated it with
+          Richard Chen for his many fixes.
+        - Added type => 'sometype', source => 'source' new() syntax.
+        - made "NAME=" in tags optional.  Added a test.pl to check for
+          this.
+
+0.03  Fri June 11 17:37:00 1999
+        - fixed a few irritating "undefined variable" errors in -w
+        - big speedup on large TMPL_LOOPs.  They are at least one order of
+          magnitude faster now!
+        - die_on_bad_params => 0 never really worked!  It does now.
+
+0.04  Fri June 18 12:00:00 1999
+        - fixed cacheing - under certain conditions it was totally broken!
+        - changed {param} to {param_values} - some older perls complained.
+        - die_on_bad_params => 0 now also applied to loop body.
+        - added copious comments about how bad m//i is to avoid future
+          bug reports about [tT][hH][iI][sS]!
+        - added numerous bug fixes and optimizations submitted by Mike
+          Blazer, Adriano Nagelschmidt Rodrigues, Andrej Mikus and
+          Ilya Obshadko.  Thanks!
+        
