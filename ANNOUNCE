@@ -1,90 +1,63 @@
-ANNOUNCEMENT: NEW VERSION: HTML::Template 2.4
+ANNOUNCEMENT: HTML::Template 2.5
 
 HTML::Template - a Perl module to use HTML Templates
 
 CHANGES
 
-2.4
+2.5
 
-- Bug Fix: case_sensitive option broke loops (Peter Leonard)
+- Doc Fix: added reference to new HTML::Template website at
+           http://html-template.sourceforge.net
 
-- Bug Fix: code-ref params now work with IF and UNLESS
+- Bug Fix: global_vars fixed for loops within loops
+
+- Bug Fix: include paths were broken under Windows (David Ferrance)
+
+- Bug Fix: nested include path handling was wrong (Gyepi Sam)
+
+- Bug Fix: MD5 signatures for file cache corrected (Martin Schroth)
+
+- Bug Fix: print_to was broken for tied filehandles (Darren Chamberlain)
+
+- Doc Fix: added mailing-list archive URL to FAQ, added link to
+           tutorial, fixed typos and formatting
 
 
 DESCRIPTION
 
-This module attempts make using HTML templates simple and natural.  It
-extends standard HTML with a few new HTML-esque tags - <TMPL_VAR>,
-<TMPL_LOOP>, <TMPL_INCLUDE>, <TMPL_IF>, <TMPL_UNLESS> and <TMPL_ELSE>.
-The file written with HTML and these new tags is called a template.
-It is usually saved separate from your script - possibly even created
-by someone else!  Using this module you fill in the values for the
-variables, loops and branches declared in the template.  This allows
-you to seperate design - the HTML - from the data, which you generate
-in the Perl script.
+    This module attempts to make using HTML templates simple and natural. It
+    extends standard HTML with a few new HTML-esque tags - <TMPL_VAR>,
+    <TMPL_LOOP>, <TMPL_INCLUDE>, <TMPL_IF>, <TMPL_ELSE> and <TMPL_UNLESS>.
+    The file written with HTML and these new tags is called a template. It
+    is usually saved separate from your script - possibly even created by
+    someone else! Using this module you fill in the values for the
+    variables, loops and branches declared in the template. This allows you
+    to separate design - the HTML - from the data, which you generate in the
+    Perl script.
 
-A Japanese translation of the documentation is available at:
+    This module is licensed under the GPL. See the LICENSE section below for
+    more details.
 
-   http://member.nifty.ne.jp/hippo2000/perltips/html/template.htm
+TUTORIAL
 
-This module is licenced under the GPL.  See the LICENCE section of the
-README.
+    If you're new to HTML::Template, I suggest you start with the
+    introductory article available on the HTML::Template website:
 
+       http://html-template.sourceforge.net
 
 AVAILABILITY
 
-This module is available on SourceForge.  Download it at:
+    This module is available on SourceForge.  Download it at:
 
-  http://prdownloads.sourceforge.net/html-template/HTML-Template-2.4.tar.gz
+       http://html-template.sourceforge.net
 
-The module is also available on CPAN.  You can get it using CPAN.pm or
-go to:
+    The module is also available on CPAN.  You can get it using
+    CPAN.pm or go to:
 
-  http://www.cpan.org/authors/id/S/SA/SAMTREGAR/
-
-
-MOTIVATION
-
-It is true that there are a number of packages out there to do HTML
-templates.  On the one hand you have things like HTML::Embperl which
-allows you to freely mix Perl with HTML.  On the other hand lie
-home-grown variable substitution solutions.  Hopefully the module can
-find a place between the two.
-
-One advantage of this module over a full HTML::Embperl-esque solution
-is that it enforces an important divide - design and programming.  By
-limiting the programmer to just using simple variables and loops in
-the HTML, the template remains accessible to designers and other
-non-perl people.  The use of HTML-esque syntax goes further to make
-the format understandable to others.  In the future this similarity
-could be used to extend existing HTML editors/analyzers to support
-this syntax.
-
-An advantage of this module over home-grown tag-replacement schemes is
-the support for loops.  In my work I am often called on to produce
-tables of data in html.  Producing them using simplistic HTML
-templates results in CGIs containing lots of HTML since the HTML
-itself could not represent loops.  The introduction of loop statements
-in the HTML simplifies this situation considerably.  The designer can
-layout a single row and the programmer can fill it in as many times as
-necessary - all they must agree on is the parameter names.
-
-For all that, I think the best thing about this module is that it does
-just one thing and it does it quickly and carefully.  It doesn't try
-to replace Perl and HTML, it just augments them to interact a little
-better.  And it's pretty fast.
-
-
-DOCUMENTATION
-
-The documentation is in Template.pm in the form of POD format
-perldocs.  Even the above text might be out of date, so be sure to
-check the perldocs for the straight truth.
-
+       http://www.cpan.org/authors/id/S/SA/SAMTREGAR/
 
 CONTACT INFO
 
-This module was written by Sam Tregar (sam@tregar.com) for Vanguard
-Media (http://www.vm.com).  You can join the HTML::Template
-mailing-list by sending a blank message to
-htmltmpl-subscribe@lists.vm.com.
+    This module was written by Sam Tregar (sam@tregar.com). You can join the 
+    HTML::Template mailing-list by sending a blank message to
+    htmltmpl-subscribe@lists.vm.com.

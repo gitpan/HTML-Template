@@ -28,12 +28,16 @@ templates/vanguard1.tmpl
 templates/vanguard2.tmpl
 templates/loop-context.tmpl
 templates/searchpath/included.tmpl
+templates/searchpath/two.tmpl
+templates/searchpath/three.tmpl
 templates/include_path/a.tmpl
 templates/include_path/b.tmpl
+templates/include_path/one.tmpl
 templates/multiline_tags.tmpl
 templates/newline_test1.tmpl
 templates/newline_test2.tmpl
 templates/case_loop.tmpl
+templates/global-loops.tmpl
 scripts/time_trial.pl
 scripts/clean_shm.pl
 README

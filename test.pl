@@ -3,7 +3,7 @@
 
 use strict;
 use Test;
-BEGIN { plan tests => 43 };
+BEGIN { plan tests => 55 };
 
 use HTML::Template;
 ok(1);
@@ -686,3 +686,34 @@ $template->param(bool => sub { 0 });
 $output = $template->output();
 ok($output !~ /INSIDE/ and $output =~ /unless/);
 
+# test global_vars for loops within loops
+$template = HTML::Template->new(path => ['templates'],
+				filename => 'global-loops.tmpl',
+				global_vars => 1);
+$template->param(global => "global val");
+$template->param(outer_loop => [
+				{ 
+				 foo => 'foo val 1',
+				 inner_loop => [
+						{ bar => 'bar val 1' },
+						{ bar => 'bar val 2' },
+					       ],
+				},
+				{
+				 foo => 'foo val 2',
+				 inner_loop => [
+						{ bar => 'bar val 3' },
+						{ bar => 'bar val 4' },
+					       ],
+				}
+			       ]);
+$output = $template->output;
+ok($output =~ /inner loop foo:    foo val 1/ and
+   $output =~ /inner loop foo:    foo val 2/);
+
+
+# test nested include path handling
+my $template = HTML::Template->new(path => ['templates'],
+				   filename => 'include_path/one.tmpl');
+$output = $template->output;
+ok($output =~ /ONE/ and $output =~ /TWO/ and $output =~ /THREE/);

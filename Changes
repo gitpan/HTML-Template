@@ -200,3 +200,14 @@ Revision history for Perl extension HTML::Template.
 2.4 Mon August 27 12:00:00 2001
       - Bug Fix: case_sensitive option broke loops (Peter Leonard)
       - Bug Fix: code-ref params now work with IF and UNLESS
+
+2.5 Fri Feb 01 12:00:00 2002
+      - Bug Fix: global_vars fixed for loops within loops
+      - Bug Fix: include paths were broken under Windows (David Ferrance)
+      - Bug Fix: nested include path handling was wrong (Gyepi Sam)
+      - Bug Fix: MD5 signatures for file cache corrected (Martin Schroth)
+      - Bug Fix: print_to was broken for tied filehandles (Darren Chamberlain)
+      - Doc Fix: added mailing-list archive URL to FAQ, added link to
+                 tutorial, fixed typos and formatting
+      - Doc Fix: added reference to new HTML::Template website at
+                 http://html-template.sourceforge.net/

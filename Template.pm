@@ -1,6 +1,6 @@
 package HTML::Template;
 
-$HTML::Template::VERSION = '2.4';
+$HTML::Template::VERSION = '2.5';
 
 =head1 NAME
 
@@ -13,59 +13,57 @@ extra tags, the simplest being <TMPL_VAR>
 
 For example, test.tmpl:
 
-  <HTML>
-  <HEAD><TITLE>Test Template</TITLE>
-  <BODY>
+  <html>
+  <head><title>Test Template</title>
+  <body>
   My Home Directory is <TMPL_VAR NAME=HOME>
-  <P>
+  <p>
   My Path is set to <TMPL_VAR NAME=PATH>
-  </BODY>
-  </HTML>
-  
+  </body>
+  </html>
 
 Now create a small CGI program:
 
+  #!/usr/bin/perl -w
   use HTML::Template;
 
   # open the html template
   my $template = HTML::Template->new(filename => 'test.tmpl');
 
   # fill in some parameters
-  $template->param(
-      HOME => $ENV{HOME},
-      PATH => $ENV{PATH},
-  );
+  $template->param(HOME => $ENV{HOME});
+  $template->param(PATH => $ENV{PATH});
 
-  # send the obligatory Content-Type
-  print "Content-Type: text/html\n\n";
-
-  # print the template
-  print $template->output;
+  # send the obligatory Content-Type and print the template output
+  print "Content-Type: text/html\n\n", $template->output;
 
 If all is well in the universe this should show something like this in
 your browser when visiting the CGI:
 
-My Home Directory is /home/some/directory
-My Path is set to /bin;/usr/bin
+  My Home Directory is /home/some/directory
+  My Path is set to /bin;/usr/bin
 
 =head1 DESCRIPTION
 
-This module attempts to make using HTML templates simple and natural.  It
-extends standard HTML with a few new HTML-esque tags - <TMPL_VAR>,
-<TMPL_LOOP>, <TMPL_INCLUDE>, <TMPL_IF> and <TMPL_ELSE>.  The file
-written with HTML and these new tags is called a template.  It is
-usually saved separate from your script - possibly even created by
-someone else!  Using this module you fill in the values for the
+This module attempts to make using HTML templates simple and natural.
+It extends standard HTML with a few new HTML-esque tags - <TMPL_VAR>,
+<TMPL_LOOP>, <TMPL_INCLUDE>, <TMPL_IF>, <TMPL_ELSE> and <TMPL_UNLESS>.
+The file written with HTML and these new tags is called a template.
+It is usually saved separate from your script - possibly even created
+by someone else!  Using this module you fill in the values for the
 variables, loops and branches declared in the template.  This allows
 you to separate design - the HTML - from the data, which you generate
 in the Perl script.
 
-A Japanese translation of the documentation is available at:
-
-   http://member.nifty.ne.jp/hippo2000/perltips/html/template.htm
-
 This module is licensed under the GPL.  See the LICENSE section
 below for more details.
+
+=head1 TUTORIAL
+
+If you're new to HTML::Template, I suggest you start with the
+introductory article available on the HTML::Template website:
+
+   http://html-template.sourceforge.net
 
 =head1 MOTIVATION
 
@@ -98,32 +96,11 @@ just one thing and it does it quickly and carefully.  It doesn't try
 to replace Perl and HTML, it just augments them to interact a little
 better.  And it's pretty fast.
 
-=head1 The Tags
+=head1 THE TAGS
 
-Note: even though these tags look like HTML they are a little
-different - they're allowed to "break the rules".  Something like:
+=head2 TMPL_VAR
 
-   <IMG SRC="<TMPL_VAR NAME=IMAGE_SRC>">
-
-is not really valid HTML, but it is a perfectly valid use and will
-work as planned.
-
-The "NAME=" in the tag is optional, although for extensibility's sake I
-recommend using it.  Example - "<TMPL_LOOP LOOP_NAME>" is acceptable.
-
-If you're a fanatic about valid HTML and would like your templates
-to conform to valid HTML syntax, you may optionally type template tags
-in the form of HTML comments. This may be of use to HTML authors who
-would like to validate their templates' HTML syntax prior to
-HTML::Template processing, or who use DTD-savvy editing tools.
-
-  <!-- TMPL_VAR NAME=PARAM1 -->
-
-In order to realize a dramatic savings in bandwidth, the standard
-(non-comment) tags will be used throughout the rest of this
-documentation.
-
-=head2 <TMPL_VAR NAME="PARAMETER_NAME">
+  <TMPL_VAR NAME="PARAMETER_NAME">
 
 The <TMPL_VAR> tag is very simple.  For each <TMPL_VAR> tag in the
 template you call $template->param(PARAMETER_NAME => "VALUE").  When
@@ -139,13 +116,13 @@ and &amp; respectively.  This is useful when you want to use a
 TMPL_VAR in a context where those characters would cause trouble.
 Example:
 
-   <INPUT NAME=param TYPE=TEXT VALUE="<TMPL_VAR NAME="param">">
+   <input name=param type=text value="<TMPL_VAR NAME="PARAM">">
 
 If you called param() with a value like sam"my you'll get in trouble
 with HTML's idea of a double-quote.  On the other hand, if you use
 ESCAPE=HTML, like this:
 
-   <INPUT NAME=param TYPE=TEXT VALUE="<TMPL_VAR ESCAPE=HTML NAME="param">">
+   <input name=param type=text value="<TMPL_VAR ESCAPE=HTML NAME="PARAM">">
 
 You'll get what you wanted no matter what value happens to be passed in for
 param.  You can also write ESCAPE="HTML", ESCAPE='HTML' and ESCAPE='1'.
@@ -156,25 +133,27 @@ There is also the "ESCAPE=URL" option which may be used for VARs that
 populate a URL.  It will do URL escaping, like replacing ' ' with '+'
 and '/' with '%2F'.
 
-=head2 <TMPL_LOOP NAME="LOOP_NAME"> </TMPL_LOOP>
+=head2 TMPL_LOOP
 
-The <TMPL_LOOP> tag is a bit more complicated.  The <TMPL_LOOP> tag
-allows you to delimit a section of text and give it a name.  Inside
-the <TMPL_LOOP> you place <TMPL_VAR>s.  Now you pass to param() a list
-(an array ref) of parameter assignments (hash refs).  The loop
-iterates over this list and produces output from the text block for
-each pass.  Unset parameters are skipped.  Here's an example:
+  <TMPL_LOOP NAME="LOOP_NAME"> ... </TMPL_LOOP>
 
-   In the template:
+The <TMPL_LOOP> tag is a bit more complicated than <TMPL_VAR>.  The
+<TMPL_LOOP> tag allows you to delimit a section of text and give it a
+name.  Inside this named loop you place <TMPL_VAR>s.  Now you pass to
+param() a list (an array ref) of parameter assignments (hash refs) for
+this loop.  The loop iterates over the list and produces output from
+the text block for each pass.  Unset parameters are skipped.  Here's
+an example:
+
+ In the template:
 
    <TMPL_LOOP NAME=EMPLOYEE_INFO>
-         Name: <TMPL_VAR NAME=NAME> <P>
-         Job: <TMPL_VAR NAME=JOB> <P>
-        <P>
+      Name: <TMPL_VAR NAME=NAME> <br>
+      Job:  <TMPL_VAR NAME=JOB>  <p>
    </TMPL_LOOP>
 
 
-   In the script:
+ In the script:
 
    $template->param(EMPLOYEE_INFO => [ 
                                        { name => 'Sam', job => 'programmer' },
@@ -184,14 +163,13 @@ each pass.  Unset parameters are skipped.  Here's an example:
    print $template->output();
 
   
-   The output:
+ The output in a browser:
 
-   Name: Sam <P>
-   Job: programmer <P>
-   <P>
-   Name: Steve <P>
-   Job: soda jerk <P>
-   <P>
+   Name: Sam
+   Job: programmer
+
+   Name: Steve
+   Job: soda jerk
 
 As you can see above the <TMPL_LOOP> takes a list of variable
 assignments and then iterates over the loop body producing output.
@@ -224,8 +202,8 @@ other ways are possible!):
 The above example would work with a template like:
 
    <TMPL_LOOP NAME="THIS_LOOP">
-      Word: <TMPL_VAR NAME="WORD"><BR>
-      Number: <TMPL_VAR NAME="NUMBER"><P>
+      Word: <TMPL_VAR NAME="WORD">     <br>
+      Number: <TMPL_VAR NAME="NUMBER"> <p>
    </TMPL_LOOP>
 
 It would produce output like:
@@ -239,19 +217,18 @@ It would produce output like:
    Word: Cool
    Number: 3
 
-
 <TMPL_LOOP>s within <TMPL_LOOP>s are fine and work as you would
 expect.  If the syntax for the param() call has you stumped, here's an
 example of a param call with one nested loop:
 
-  $template->param('ROW',[
-                          { name => 'Bobby',
-                            nicknames => [
-                                          { name => 'the big bad wolf' }, 
-                                          { name => 'He-Man' },
-                                         ],
-                          },
-                         ],
+  $template->param(LOOP => [
+                            { name => 'Bobby',
+                              nicknames => [
+                                            { name => 'the big bad wolf' }, 
+                                            { name => 'He-Man' },
+                                           ],
+                            },
+                           ],
                   );
 
 Basically, each <TMPL_LOOP> gets an array reference.  Inside the array
@@ -263,29 +240,33 @@ from the <TMPL_LOOP>.  The variables in the outer blocks are not
 visible within a template loop.  For the computer-science geeks among
 you, a <TMPL_LOOP> introduces a new scope much like a perl subroutine
 call.  If you want your variables to be global you can use
-'global_vars' option to new described below.
+'global_vars' option to new() described below.
 
-=head2 <TMPL_INCLUDE NAME="filename.tmpl">
+=head2 TMPL_INCLUDE
+
+  <TMPL_INCLUDE NAME="filename.tmpl">
 
 This tag includes a template directly into the current template at the
 point where the tag is found.  The included template contents are used
 exactly as if its contents were physically included in the master
 template.
 
-The file specified can be a full path - beginning with a '/'.  If it
-isn't a full path, the path to the enclosing file is tried first.
-After that the path in the environment variable HTML_TEMPLATE_ROOT is
-tried next, if it exists.  Next, the "path" new() option is consulted.
-As a final attempt, the filename is passed to open() directly.  See
-below for more information on HTML_TEMPLATE_ROOT and the "path" option
-to new().
+The file specified can be an absolute path (beginning with a '/' under
+Unix, for example).  If it isn't absolute, the path to the enclosing
+file is tried first.  After that the path in the environment variable
+HTML_TEMPLATE_ROOT is tried, if it exists.  Next, the "path" option is
+consulted.  As a final attempt, the filename is passed to open()
+directly.  See below for more information on HTML_TEMPLATE_ROOT and
+the "path" option to new().
 
 As a protection against infinitly recursive includes, an arbitary
 limit of 10 levels deep is imposed.  You can alter this limit with the
 "max_includes" option.  See the entry for the "max_includes" option
 below for more details.
 
-=head2 <TMPL_IF NAME="CONTROL_PARAMETER_NAME"> </TMPL_IF>
+=head2 TMPL_IF
+
+  <TMPL_IF NAME="PARAMETER_NAME"> ... </TMPL_IF>
 
 The <TMPL_IF> tag allows you to include or not include a block of the
 template based on the value of a given parameter name.  If the
@@ -331,7 +312,9 @@ problem in keeping the two synchronized.  I suggest you adopt the
 practice of only using TMPL_IF if you can do so without requiring a
 matching if() in your Perl code.
 
-=head2 <TMPL_ELSE>
+=head2 TMPL_ELSE
+
+  <TMPL_IF NAME="PARAMETER_NAME"> ... <TMPL_ELSE> ... </TMPL_IF>
 
 You can include an alternate block in your TMPL_IF block by using
 TMPL_ELSE.  NOTE: You still end the block with </TMPL_IF>, not
@@ -345,7 +328,9 @@ TMPL_ELSE.  NOTE: You still end the block with </TMPL_IF>, not
      Some text that is included only if BOOL is false
    </TMPL_IF>
 
-=head2 <TMPL_UNLESS NAME="CONTROL_PARAMETER_NAME"> </TMPL_UNLESS>
+=head2 TMPL_UNLESS
+
+  <TMPL_UNLESS NAME="PARAMETER_NAME"> ... </TMPL_UNLESS>
 
 This tag is the opposite of <TMPL_IF>.  The block is output if the
 CONTROL_PARAMETER is set false or not defined.  You can use
@@ -372,7 +357,31 @@ output if the loop has zero rows.
 
 =cut
 
-=head1 Methods
+=head2 NOTES
+
+HTML::Template's tags are meant to mimic normal HTML tags.  However,
+they are allowed to "break the rules".  Something like:
+
+   <img src="<TMPL_VAR IMAGE_SRC>">
+
+is not really valid HTML, but it is a perfectly valid use and will
+work as planned.
+
+The "NAME=" in the tag is optional, although for extensibility's sake I
+recommend using it.  Example - "<TMPL_LOOP LOOP_NAME>" is acceptable.
+
+If you're a fanatic about valid HTML and would like your templates
+to conform to valid HTML syntax, you may optionally type template tags
+in the form of HTML comments. This may be of use to HTML authors who
+would like to validate their templates' HTML syntax prior to
+HTML::Template processing, or who use DTD-savvy editing tools.
+
+  <!-- TMPL_VAR NAME=PARAM1 -->
+
+In order to realize a dramatic savings in bandwidth, the standard
+(non-comment) tags will be used throughout this documentation.
+
+=head1 METHODS
 
 =head2 new()
 
@@ -443,6 +452,10 @@ are available:
 
 =over 4
 
+=item Error Detection Options
+
+=over 4 
+
 =item *
 
 die_on_bad_params - if set to 0 the module will let you call
@@ -451,12 +464,27 @@ exist in the template body.  Defaults to 1.
 
 =item *
 
-strict - if set to 0 the module will allow things that look like they might be TMPL_* tags to get by without dieing.  Example:
+strict - if set to 0 the module will allow things that look like they
+might be TMPL_* tags to get by without dieing.  Example:
 
    <TMPL_HUH NAME=ZUH>
 
 Would normally cause an error, but if you call new with strict => 0,
 HTML::Template will ignore it.  Defaults to 1.
+
+=item *
+
+vanguard_compatibility_mode - if set to 1 the module will expect to
+see <TMPL_VAR>s that look like %NAME% in addition to the standard
+syntax.  Also sets die_on_bad_params => 0.  If you're not at Vanguard
+Media trying to use an old format template don't worry about this one.
+Defaults to 0.
+
+=back
+
+=item Caching Options
+
+=over 4
 
 =item *
 
@@ -562,6 +590,79 @@ file_cache and normal cache mode for the best possible caching.  The
 file_cache_* options that work with file_cache apply to double_file_cache
 as well.  By default double_file_cache is 0.
 
+=back
+
+=item Filesystem Options
+
+=over 4
+
+=item *
+
+path - you can set this variable with a list of paths to search for
+files specified with the "filename" option to new() and for files
+included with the <TMPL_INCLUDE> tag.  This list is only consulted
+when the filename is relative.  The HTML_TEMPLATE_ROOT environment
+variable is always tried first if it exists.  In the case of a
+<TMPL_INCLUDE> file, the path to the including file is also tried
+before path is consulted.
+
+Example:
+
+   my $template = HTML::Template->new( filename => 'file.tmpl',
+                                       path => [ '/path/to/templates',
+                                                 '/alternate/path'
+                                               ]
+                                      );
+
+NOTE: the paths in the path list must be expressed as UNIX paths,
+separated by the forward-slash character ('/').
+
+=item *
+
+search_path_on_include - if set to a true value the module will search
+from the top of the array of paths specified by the path option on
+every <TMPL_INCLUDE> and use the first matching template found.  The
+normal behavior is to look only in the current directory for a
+template to include.  Defaults to 0.
+
+=back
+
+=item Debugging Options
+
+=over 4
+
+=item *
+
+debug - if set to 1 the module will write random debugging information
+to STDERR.  Defaults to 0.
+
+=item *
+
+stack_debug - if set to 1 the module will use Data::Dumper to print
+out the contents of the parse_stack to STDERR.  Defaults to 0.
+
+=item *
+
+cache_debug - if set to 1 the module will send information on cache
+loads, hits and misses to STDERR.  Defaults to 0.
+
+=item *
+
+shared_cache_debug - if set to 1 the module will turn on the debug
+option in IPC::SharedCache - see L<IPC::SharedCache> for
+details. Defaults to 0.
+
+=item *
+
+memory_debug - if set to 1 the module will send information on cache
+memory usage to STDERR.  Requires the GTop module.  Defaults to 0.
+
+=back
+
+=item Miscellaneous Options
+
+=over 4
+
 =item *
 
 associate - this option allows you to inherit the parameter values
@@ -659,27 +760,6 @@ not __INNER__.
 
 =item *
 
-path - you can set this variable with a list of paths to search for
-files specified with the "filename" option to new() and for files
-included with the <TMPL_INCLUDE> tag.  This list is only consulted
-when the filename is relative.  The HTML_TEMPLATE_ROOT environment
-variable is always tried first if it exists.  In the case of a
-<TMPL_INCLUDE> file, the path to the including file is also tried
-before path is consulted.
-
-Example:
-
-   my $template = HTML::Template->new( filename => 'file.tmpl',
-                                       path => [ '/path/to/templates',
-                                                 '/alternate/path'
-                                               ]
-                                      );
-
-NOTE: the paths in the path list must be expressed as UNIX paths,
-separated by the forward-slash character ('/').
-
-=item *
-
 no_includes - set this option to 1 to disallow the <TMPL_INCLUDE> tag
 in the template file.  This can be used to make opening untrusted
 templates B<slightly> less dangerous.  Defaults to 0.
@@ -690,14 +770,6 @@ max_includes - set this variable to determine the maximum depth that
 includes can reach.  Set to 10 by default.  Including files to a depth
 greater than this value causes an error message to be displayed.  Set
 to 0 to disable this protection.
-
-=item *
-
-search_path_on_include - if set to a true value the module will search
-from the top of the array of paths specified by the path option on
-every <TMPL_INCLUDE> and use the first matching template found.  The
-normal behavior is to look only in the current directory for a
-template to include.  Defaults to 0.
 
 =item *
 
@@ -717,6 +789,19 @@ Example:
 Normally this wouldn't work as expected, since <TMPL_VAR NORMAL>'s
 value outside the loop is not available inside the loop.
 
+The global_vars option also allows you to access the values of an
+enclosing loop within an inner loop.  For example, in this loop the
+inner loop will have access to the value of OUTER_VAR in the correct
+iteration:
+
+   <TMPL_LOOP OUTER_LOOP>
+      OUTER: <TMPL_VAR OUTER_VAR>
+        <TMPL_LOOP INNER_LOOP>
+           INNER: <TMPL_VAR INNER_VAR>
+           INSIDE OUT: <TMPL_VAR OUTER_VAR>
+        </TMPL_LOOP>
+   </TMPL_LOOP>
+
 =item *
 
 filter - this option allows you to specify a filter for your template
@@ -733,7 +818,7 @@ FOO!!!" and transforms them into HTML::Template tags:
    my $filter = sub {
      my $text_ref = shift;
      $$text_ref =~ s/!!!ZAP_(.*?)!!!/<TMPL_$1>/g;
-   }   
+   };
 
    # open zap.tmpl using the above filter
    my $template = HTML::Template->new(filename => 'zap.tmpl',
@@ -767,39 +852,7 @@ specified.
 The specified filters will be called for any TMPL_INCLUDEed files just
 as they are for the main template file.
 
-=item *
-
-vanguard_compatibility_mode - if set to 1 the module will expect to
-see <TMPL_VAR>s that look like %NAME% in addition to the standard
-syntax.  Also sets die_on_bad_params => 0.  If you're not at Vanguard
-Media trying to use an old format template don't worry about this one.
-Defaults to 0.
-
-=item *
-
-debug - if set to 1 the module will write random debugging information
-to STDERR.  Defaults to 0.
-
-=item *
-
-stack_debug - if set to 1 the module will use Data::Dumper to print
-out the contents of the parse_stack to STDERR.  Defaults to 0.
-
-=item *
-
-cache_debug - if set to 1 the module will send information on cache
-loads, hits and misses to STDERR.  Defaults to 0.
-
-=item *
-
-shared_cache_debug - if set to 1 the module will turn on the debug
-option in IPC::SharedCache - see L<IPC::SharedCache> for
-details. Defaults to 0.
-
-=item *
-
-memory_debug - if set to 1 the module will send information on cache
-memory usage to STDERR.  Requires the GTop module.  Defaults to 0.
+=back
 
 =back 4
 
@@ -1204,7 +1257,7 @@ sub _get_cache_filename {
   my ($self, $filepath) = @_;
 
   # hash the filename ...
-  my $hash = Digest::MD5->md5_hex($filepath);
+  my $hash = Digest::MD5::md5_hex($filepath);
   
   # ... and build a path out of it.  Using the first two charcters
   # gives us 255 buckets.  This means you can have 255,000 templates
@@ -1649,7 +1702,7 @@ sub _parse {
   use vars qw($fcounter $fname $fmax);
   local (*fcounter, *fname, *fmax);
 
-  my @fstack = ([$options->{filename} || "main template", 
+  my @fstack = ([$options->{filepath} || "/fake/path/for/non/file/template",
                  1, 
                  scalar @{[$self->{template} =~ m/(\n)/g]} + 1
                 ]);
@@ -2014,12 +2067,13 @@ sub _parse {
 	my $filename = $name;
 	
 	# look for the included file...
-	my @path = split('/', $options->{filepath});
 	my $filepath;
-	if ($options->{search_path_on_include} or not @path) {
+	if ($options->{search_path_on_include}) {
 	  $filepath = $self->_find_file($filename);
 	} else {
-	  $filepath = $self->_find_file($filename, \@path);
+	  $filepath = $self->_find_file($filename, 
+					[File::Spec->splitdir($fstack[-1][0])]
+				       );
 	}
 	die "HTML::Template->new() : Cannot open included file $filename : file not found."
 	  unless defined($filepath);
@@ -2169,7 +2223,7 @@ sub _unglobalize_vars {
       grep { ref($_) eq 'HTML::Template::LOOP'} @{$self->{parse_stack}};
 }
 
-=head2 param
+=head2 param()
 
 param() can be called in a number of ways
 
@@ -2423,7 +2477,7 @@ sub output {
 
     foreach my $param (keys %{$self->{param_map}}) {
       unless (defined($self->param($param))) {
-      OBJ: foreach my $associated_object (@{$options->{associate}}) {
+      OBJ: foreach my $associated_object (reverse @{$options->{associate}}) {
           $self->param($param, scalar $associated_object->param($case_map{$associated_object}{$param})), last OBJ
             if (exists($case_map{$associated_object}{$param}));
         }
@@ -2438,8 +2492,8 @@ sub output {
   my $result = '';
 
   tie $result, 'HTML::Template::PRINTSCALAR', $args{print_to}
-    if (defined $args{print_to});
-  
+    if defined $args{print_to} and not tied $args{print_to};
+	
   my $type;
   my $parse_stack_length = $#parse_stack;
   for (my $x = 0; $x <= $parse_stack_length; $x++) {
@@ -2798,14 +2852,28 @@ __END__
 In the interest of greater understanding I've started a FAQ section of
 the perldocs.  Please look in here before you send me email.
 
-1) Is there a place to go to discuss HTML::Template and/or get help?
+=over 4
 
-There's a mailing-list for HTML::Template at htmltmpl@lists.vm.com.
+=item 1
+
+Q: Is there a place to go to discuss HTML::Template and/or get help?
+
+A: There's a mailing-list for HTML::Template at htmltmpl@lists.vm.com.
 Send a blank message to htmltmpl-subscribe@lists.vm.com to join!
 
-2) I want support for <TMPL_XXX>!  How about it?
+=item 2
 
-Maybe.  I definitely encourage people to discuss their ideas for
+Q: Is there a searchable archive for the mailing-list?
+
+A: Yes, thanks to Sean P. Scanlon, there is:
+
+   http://bluedot.net/mail/archive/
+
+=item 3
+
+Q: I want support for <TMPL_XXX>!  How about it?
+
+A: Maybe.  I definitely encourage people to discuss their ideas for
 HTML::Template on the mailing list.  Please be ready to explain to me
 how the new tag fits in with HTML::Template's mission to provide a
 fast, lightweight system for using HTML templates.
@@ -2814,28 +2882,35 @@ NOTE: Offering to program said addition and provide it in the form of
 a patch to the most recent version of HTML::Template will definitely
 have a softening effect on potential opponents!
 
-3) I found a bug, can you fix it?
+=item 4
 
-That depends.  Did you send me the VERSION of HTML::Template, a test
+Q: I found a bug, can you fix it?
+
+A: That depends.  Did you send me the VERSION of HTML::Template, a test
 script and a test template?  If so, then almost certainly.
 
 If you're feeling really adventurous, HTML::Template has a publically
 available CVS server.  See below for more information in the PUBLIC
 CVS SERVER section.
 
-4) <TMPL_VAR>s from the main template aren't working inside a <TMPL_LOOP>!  Why?
+=item 5
 
-This is the intended behavior.  <TMPL_LOOP> introduces a separate
+Q: <TMPL_VAR>s from the main template aren't working inside a
+<TMPL_LOOP>!  Why?
+
+A: This is the intended behavior.  <TMPL_LOOP> introduces a separate
 scope for <TMPL_VAR>s much like a subroutine call in Perl introduces a
-separate scope for "my" variables.  
+separate scope for "my" variables.
 
 If you want your <TMPL_VAR>s to be global you can set the
 'global_vars' option when you call new().  See above for documentation
 of the 'global_vars' new() option.
 
-5) Why do you use /[Tt]/ instead of /t/i?  It's so ugly!
+=item 6
 
-Simple - the case-insensitive match switch is very inefficient.
+Q: Why do you use /[Tt]/ instead of /t/i?  It's so ugly!
+
+A: Simple - the case-insensitive match switch is very inefficient.
 According to _Mastering_Regular_Expressions_ from O'Reilly Press,
 /[Tt]/ is faster and more space efficient than /t/i - by as much as
 double against long strings.  //i essentially does a lc() on the
@@ -2844,9 +2919,11 @@ string and keeps a temporary copy in memory.
 When this changes, and it is in the 5.6 development series, I will
 gladly use //i.  Believe me, I realize [Tt] is hideously ugly.
 
-6) How can I pre-load my templates using cache-mode and mod_perl?
+=item 7
 
-Add something like this to your startup.pl:
+Q: How can I pre-load my templates using cache-mode and mod_perl?
+
+A: Add something like this to your startup.pl:
 
    use HTML::Template;
    use File::Find;
@@ -2875,59 +2952,66 @@ instead getting a speed increase, you'll double your memory usage.  To
 find out if this is happening set cache_debug => 1 in your application
 code and look for "CACHE MISS" messages in the logs.
 
-7) What characters are allowed in TMPL_* NAMEs?
+=item 8
 
-Numbers, letters, '.', '/', '+', '-' and '_'.
+Q: What characters are allowed in TMPL_* NAMEs?
 
-8) How can I execute a program from inside my template?  
+A: Numbers, letters, '.', '/', '+', '-' and '_'.
 
-Short answer: you can't.  Longer answer: you shouldn't since this
+=item 9
+
+Q: How can I execute a program from inside my template?  
+
+A: Short answer: you can't.  Longer answer: you shouldn't since this
 violates the fundamental concept behind HTML::Template - that design
 and code should be seperate.
 
-But, inevitably some people still want to do it.  At times it has even
-seemed that HTML::Template development might split over this issue, so
-I will attempt a compromise.  Here is a method you can use to allow
-your template authors to evaluate arbitrary perl scripts from within
-the template.
+But, inevitably some people still want to do it.  If that describes
+you then you should take a look at
+L<HTML::Template::Expr|HTML::Template::Expr>.  Using
+HTML::Template::Expr it should be easy to write a run_program()
+function.  Then you can do awful stuff like:
 
-First, tell all your designers that when they want to run a perl
-script named "program.pl" they should use a tag like:
+  <tmpl_var expr="run_program('foo.pl')">
 
-  <TMPL_VAR NAME="__execute_program.pl__">
+Just, please, don't tell me about it.  I'm feeling guilty enough just
+for writing HTML::Template::Expr in the first place.
 
-Then, have all your programmers call this subroutine instead of
-calling HTML::Template::new directly.  They still use the same
-parameters, but they also get the program execution.  
+=item 10
 
-  sub new_template {
-    # get the template object
-    my $template = HTML::Template->new(@_);
-    
-    # find program parameters and fill them in
-    my @params = $template->param();
-    for my $param (@params) {      
-       if ($param =~ /^__execute_(.*)__$/) {
-         $template->param($param, do($1));
-       }
-    }
+Q: Can I get a copy of these docs in Japanese?
 
-    # return the template object
-    return $template;
-  }
-
-The programs called in this way should return a string containing
-their output.  A more complicated subroutine could be written to
-capture STDOUT from the scripts, but this one is simple enough to
-include in the FAQ.  Another improvement would be to use query() to
-enable program execution inside loops.
-
-9) Can I get a copy of these docs in Japanese?
-
-Yes you can.  See Kawai Takanori's translation at:
+A: Yes you can.  See Kawai Takanori's translation at:
 
    http://member.nifty.ne.jp/hippo2000/perltips/html/template.htm
 
+=item 11
+
+Q: What's the best way to create a <select> form element using
+HTML::Template?
+
+A: There is much disagreement on this issue.  My personal preference
+is to use CGI.pm's excellent popup_menu() and scrolling_list()
+functions to fill in a single <tmpl_var select_foo> variable.  
+
+To some people this smacks of mixing HTML and code in a way that they
+hoped HTML::Template would help them avoid.  To them I'd say that HTML
+is a violation of the principle of separating design from programming.
+There's no clear separation between the programmatic elements of the
+<form> tags and the layout of the <form> tags.  You'll have to draw
+the line somewhere - clearly the designer can't be entirely in charge
+of form creation.
+
+It's a balancing act and you have to weigh the pros and cons on each side.
+It is certainly possible to produce a <select> element entirely inside the
+template.  What you end up with is a rat's nest of loops and conditionals.
+Alternately you can give up a certain amount of flexibility in return for
+vastly simplifying your templates.  I generally choose the latter.
+
+Another option is to investigate HTML::FillInForm which some have
+reported success using to solve this problem.
+
+=back
 
 =head1 BUGS
 
@@ -2949,8 +3033,8 @@ CVS SERVER section.
 =head1 CREDITS
 
 This module was the brain child of my boss, Jesse Erlbaum
-(jesse@vm.com) here at Vanguard Media.  The most original idea in this
-module - the <TMPL_LOOP> - was entirely his.
+( jesse@vm.com ) at Vanguard Media ( http://vm.com ) .  The most original
+idea in this module - the <TMPL_LOOP> - was entirely his.
 
 Fixes, Bug Reports, Optimizations and Ideas have been generously
 provided by:
@@ -2995,8 +3079,20 @@ provided by:
    Roland Giersig
    Jere Julian
    Peter Leonard
+   Kenny Smith
+   Sean P. Scanlon
+   Martin Pfeffer
+   David Ferrance
+   Gyepi Sam  
+   Darren Chamberlain
 
 Thanks!
+
+=head1 WEBSITE
+
+You can find information about HTML::Template and other related modules at:
+
+   http://html-template.sourceforge.net
 
 =head1 PUBLIC CVS SERVER
 
@@ -3012,29 +3108,30 @@ htmltmpl-subscribe@lists.vm.com).
 
 =head1 LICENSE
 
-HTML::Template : A module for using HTML Templates with Perl
-Copyright (C) 2000 Sam Tregar (sam@tregar.com)
+  HTML::Template : A module for using HTML Templates with Perl
+  Copyright (C) 2000-2002 Sam Tregar (sam@tregar.com)
 
-This module is free software; you can redistribute it and/or modify it
-under the terms of either:
+  This module is free software; you can redistribute it and/or modify it
+  under the terms of either:
 
-a) the GNU General Public License as published by the Free Software
-Foundation; either version 1, or (at your option) any later version,
-or
+  a) the GNU General Public License as published by the Free Software
+  Foundation; either version 1, or (at your option) any later version,
+  
+  or
 
-b) the "Artistic License" which comes with this module.
+  b) the "Artistic License" which comes with this module.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See either
-the GNU General Public License or the Artistic License for more details.
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See either
+  the GNU General Public License or the Artistic License for more details.
 
-You should have received a copy of the Artistic License with this
-module, in the file ARTISTIC.  If not, I'll be glad to provide one.
+  You should have received a copy of the Artistic License with this
+  module, in the file ARTISTIC.  If not, I'll be glad to provide one.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
-USA
+  You should have received a copy of the GNU General Public License
+  along with this program; if not, write to the Free Software
+  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
+  USA
 
 =cut
