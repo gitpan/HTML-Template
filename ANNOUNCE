@@ -1,4 +1,4 @@
-ANNOUNCEMENT: NEW VERSION: HTML::Template 0.96
+ANNOUNCEMENT: NEW VERSION: HTML::Template 1.0
 
 NAME
 
@@ -6,13 +6,12 @@ HTML::Template - a Perl module to use HTML Templates
 
 CHANGES
 
-0.96
-        - Added "ESCAPE=1" option to <TMPL_VAR> to HTML-escape
-          variable values.  (Peter Marelas, thanks!)
-        - more bug fixes (David Glasses, James William Carlson - 
-          thanks)
-        - even *more* code cleanup!
-        - new FAQ concerning pre-loading templates and mod_perl.
+1.0
+        - An HTML::Template mailing-list!  Send a blank message to
+          htmltmpl-subscribe@lists.vm.com to join.
+        - bug fixes
+        - improved docs
+
 
 DESCRIPTION
 
@@ -80,4 +79,6 @@ check the perldocs for the straight truth.
 CONTACT INFO
 
 This module was written by Sam Tregar (sam@tregar.com) for Vanguard
-Media (http://www.vm.com).
+Media (http://www.vm.com).  You can join the HTML::Template
+mailing-list by sending a blank message to
+htmltmpl-subscribe@lists.vm.com.

@@ -1,7 +1,6 @@
 package HTML::Template;
 
-use vars qw( $VERSION %CACHE );
-$VERSION = 0.96;
+$HTML::Template::VERSION = '1.0';
 
 =head1 NAME
 
@@ -175,6 +174,50 @@ each pass.  Unset parameters are skipped.  Here's an example:
 As you can see above the <TMPL_LOOP> takes a list of variable
 assignments and then iterates over the loop body producing output.
 
+Often you'll want to generate a <TMPL_LOOP>'s contents
+programmatically.  Here's an example of how this can be done (many
+other ways are possible!):
+
+   # a couple of arrays of data to put in a loop:
+   my @words = qw(I Am Cool);
+   my @numbers = qw(1 2 3);
+
+   my @loop_data = ();  # initialize an array to hold your loop
+
+   for (my $x = 0; $x < 3; $x++) {
+     my %row_data;  # get a fresh hash for the row data
+
+     # fill in this row
+     $row_data{WORD} = $words[$x];
+     $row_data{NUMBER} = $numbers[$x];
+ 
+     # the crucial step - push a reference to this row into the loop!
+     push(@loop_data, \%row_data);
+   }
+
+   # finally, assign the loop data to the loop param, again with a
+   # reference:
+   $template->param(THIS_LOOP => \@loop_data);
+
+The above example would work with a template like:
+
+   <TMPL_LOOP NAME="THIS_LOOP">
+      Word: <TMPL_VAR NAME="WORD"><BR>
+      Number: <TMPL_VAR NAME="NUMBER"><P>
+   </TMPL_LOOP>
+
+It would produce output like:
+
+   Word: I
+   Number: 1
+
+   Word: Am
+   Number: 2
+
+   Word: Cool
+   Number: 3
+
+
 <TMPL_LOOP>s within <TMPL_LOOP>s are fine and work as you would
 expect.  If the syntax for the param() call has you stumped, here's an
 example of a param call with one nested loop:
@@ -229,8 +272,6 @@ be included by output.
 <TMPL_IF> </TMPL_IF> blocks can include any valid HTML::Template
 construct - VARs and LOOPs and other IF/ELSE blocks.  Note, however,
 that intersecting a <TMPL_IF> and a <TMPL_LOOP> is invalid.
-
-
 
    <TMPL_IF BOOL>
       <TMPL_LOOP SOME_LOOP>
@@ -305,8 +346,8 @@ prefer.
 
 And as a final option, for those that might prefer it, you can call new as:
 
-  my $t = HTML::Template->new_file(type => 'filename', 
-                                   source => 'file.tmpl');
+  my $t = HTML::Template->new(type => 'filename', 
+                              source => 'file.tmpl');
 
 Which works for all three of the source types.
 
@@ -325,13 +366,8 @@ are available:
 
 =item *
 
-debug - if set to 1 the module will write debugging information to
-STDERR.  Defaults to 0.
-
-=item *
-
 die_on_bad_params - if set to 0 the module will let you call
-$template->param('param_name', 'value') even if 'param_name' doesn't
+$template->param(param_name => 'value') even if 'param_name' doesn't
 exist in the template body.  Defaults to 1.
 
 =item *
@@ -400,6 +436,21 @@ see <TMPL_VAR>s that look like %NAME% instead of the standard syntax.
 If you're not at Vanguard Media trying to use an old format template
 don't worry about this one.  Defaults to 0.
 
+=item *
+
+debug - if set to 1 the module will write random debugging information
+to STDERR.  Defaults to 0.
+
+=item *
+
+debug_stack - if set to 1 the module will use Data::Dumper to print
+out the contents of the parse_stack to STDERR.  Defaults to 0.
+
+=item *
+
+cache_debug - if set to 1 the module will send information on cache
+loads, hits and misses to STDERR.  Defaults to 0.
+
 =back 4
 
 =cut
@@ -434,16 +485,18 @@ sub new {
   $self->{options} = $options;
 
   # set default parameters in options hash
-  $options->{debug} = 0;
-  $options->{debug_stack} = 0;
-  $options->{timing} = 0;
-  $options->{cache} = 0;
-  $options->{blind_cache} = 0;
-  $options->{cache_debug} = 0;
-  $options->{die_on_bad_params} = 1;
-  $options->{vanguard_compatibility_mode} = 0;
-  $options->{no_includes} = 0;
-  $options->{associate} = [];
+  %$options = (
+               debug => 0,
+               debug_stack => 0,
+               timing => 0,
+               cache => 0,
+               blind_cache => 0,
+               cache_debug => 0,
+               die_on_bad_params => 1,
+               vanguard_compatibility_mode => 0,
+               no_includes => 0,
+               associate => [],
+              );
   
   # load in options supplied to new()
   for (my $x = 0; $x <= $#_; $x += 2) { 
@@ -505,11 +558,13 @@ sub _new_from_loop {
   # set default parameters in options hash - a subset of the options
   # valid in a normal new().  Since _new_from_loop never calls _init,
   # many options have no relevance.
-  $options->{debug} = 0;
-  $options->{debug_stack} = 0;
-  $options->{die_on_bad_params} = 1;
-  $options->{associate} = [];
-
+  %$options = (
+               debug => 0,
+               debug_stack => 0,
+               die_on_bad_params => 1,
+               associate => [],
+              );
+  
   # load in options supplied to new()
   for (my $x = 0; $x <= $#_; $x += 2) { 
     defined($_[($x + 1)]) or die "HTML::Template->new() called with odd number of option parameters - should be of the form option => value";
@@ -537,6 +592,7 @@ sub new_scalar_ref {
 
 # initilizes all the object data structures.  Also handles global
 # cacheing of template parse data.
+use vars qw( %CACHE );
 sub _init {
   my $self = shift;
   my $options = $self->{options};
@@ -544,7 +600,7 @@ sub _init {
   # deal with $ENV{HTML_TEMPLATE_ROOT} stuff
   if (defined($options->{filename})) {
     if (!($options->{filename} =~ /^\//) and exists($ENV{HTML_TEMPLATE_ROOT})) {
-      $options->{filename} = $ENV{HTML_TEMPLATE_ROOT} . '/' . $options->{filename};
+      $options->{filename} = join('/', $ENV{HTML_TEMPLATE_ROOT}, split('/', $options->{filename}));
     }
   }
 
@@ -564,7 +620,7 @@ sub _init {
       # get the modification time
       $mtime = (stat($options->{filename}))[9];
       $options->{debug} and 
-        print "Modify time of $mtime for " . $options->{filename} . "\n";
+        print STDERR "### HTML::Template Debug ### Modify time of $mtime for ",  $options->{filename}, "\n";
       
       # if the modification time has changed remove the cache entry and
       # re-call $self->_init
@@ -573,7 +629,7 @@ sub _init {
         delete($CACHE{$options->{filename}});
         
         $options->{cache_debug} and 
-          warn "CACHE MISS : $options->{filename} : $mtime";
+          print STDERR "CACHE MISS : $options->{filename} : $mtime\n";
         
         return $self->_init;
       }
@@ -589,7 +645,7 @@ sub _init {
           if ($included_mtime != $CACHE{$options->{filename}}{included_mtimes}{$filename}) {
             delete($CACHE{$options->{filename}});
             $options->{cache_debug} and 
-              warn "CACHE MISS : $options->{filename} : INCLUDE $filename : $included_mtime";
+              print STDERR "### HTML::Template Cache Debug ### CACHE MISS : $options->{filename} : INCLUDE $filename : $included_mtime\n";
             
             return $self->_init;
           }
@@ -600,18 +656,36 @@ sub _init {
     # else, use the cached values instead of calling _init_template
     # and _parse.
     
-    $options->{cache_debug} and warn "CACHE HIT : $options->{filename}";
+    $options->{cache_debug} and print STDERR "### HTML::Template Cache Debug ### CACHE HIT : $options->{filename}\n";
     
     $self->{param_map} = $CACHE{$options->{filename}}{param_map};
     $self->{parse_stack} = $CACHE{$options->{filename}}{parse_stack};
     exists($CACHE{$options->{filename}}{included_mtimes}) and
       $self->{included_mtimes} = $CACHE{$options->{filename}}{included_mtimes};
+    
+    # the HTML::Template::LOOP HTML::Template objects may have stale
+    # options hashes.  It's necessary to update them now.  An
+    # alternative to this solution would be to do an Apache::DBI and
+    # require that new() options determine cache validity.
+    my @pstacks = ($self->{parse_stack});
+    while(@pstacks) {
+      my $pstack = pop(@pstacks);
+      foreach my $item (@$pstack) {
+        next unless (ref($item) eq 'HTML::Template::LOOP');
+        foreach my $template (values %{$item->[HTML::Template::LOOP::TEMPLATE_HASH]}) {
+          # must be the same list as the call to _new_from_loop...
+          $template->{options}{debug} = $options->{debug};
+          $template->{options}{debug_stack} = $options->{debug_stack};
+          $template->{options}{die_on_bad_params} = $options->{die_on_bad_params};
+          push(@pstacks, $template->{parse_stack});
+        }
+      }
+    }
 
     # clear out values from param_map from last run
     $self->clear_params();
 
     return $self;
-
   } 
 
   # init the template and parse data
@@ -621,7 +695,7 @@ sub _init {
   # if we're caching, cache the results of _init_template and _parse
   # for future use
   if ($options->{cache} and exists($options->{filename})) {
-    $options->{cache_debug} and warn "CACHE LOAD : $options->{filename}";
+    $options->{cache_debug} and print STDERR "### HTML::Template Cache Debug ### CACHE LOAD : $options->{filename}\n";
     
     $options->{blind_cache} or
       $CACHE{$options->{filename}}{mtime} = (stat($options->{filename}))[9];
@@ -706,8 +780,7 @@ sub _init_template {
           $self->{included_mtimes}{$filename} = (stat($filename))[9];
         }
 
-        # move the existing template lines up to their new locations,
-        # and move the new lines into place.  
+        # move the new lines into place.  
         splice(@{$self->{template}}, $line_number, 1, @templateArray);
       }
     }
@@ -725,7 +798,7 @@ sub _parse {
   my $self = shift;
   my $options = $self->{options};
   
-  $options->{debug} and print "\nIn pre_parse:\n\n";
+  $options->{debug} and print STDERR "### HTML::Template Debug ### In pre_parse:\n";
   
   # setup the stacks and maps - they're accessed by typeglobs that
   # reference the top of the stack.  They are masked so that a loop
@@ -819,7 +892,7 @@ sub _parse {
         my $post = $5; # what comes after on the line
 
         if ($which =~ /^<[tT][mM][pP][lL]_[Vv][Aa][Rr]/) {
-          $options->{debug} and print "$line_number : saw $name : \"$line\"\n";
+          $options->{debug} and print STDERR "### HTML::Template Debug ### $line_number : parsed VAR $name\n";
           
           # if we already have this var, then simply link to the existing
           # HTML::Template::VAR, else create a new one.        
@@ -854,7 +927,7 @@ sub _parse {
         
         } elsif ($which =~ /^<[tT][mM][pP][lL]_[Ll][Oo][Oo][Pp]/) {
           # we've got a loop start
-          $options->{debug} and print "$line_number : saw loop $name\n";
+          $options->{debug} and print STDERR "### HTML::Template Debug ### $line_number : LOOP $name start\n";
 
           defined $escape and 
             die "HTML::Template->new() : Found ESCAPE option in a TMPL_LOOP tag at line $line_number.  ESCAPE is only valid for TMPL_VARs.";
@@ -900,7 +973,7 @@ sub _parse {
           next PASS;
 
         } elsif ($which =~ /^<\/[tT][mM][pP][lL]_[Ll][Oo][Oo][Pp]/) {
-          $options->{debug} and print "$line_number : saw /loop : \"$line\"\n";
+          $options->{debug} and print STDERR "### HTML::Template Debug ### $line_number : LOOP end\n";
 
           defined $escape and 
             die "HTML::Template->new() : Found ESCAPE option in a /TMPL_LOOP tag at line $line_number.  ESCAPE is only valid for TMPL_VARs.";
@@ -946,8 +1019,9 @@ sub _parse {
           next PASS;
           
         } elsif ($which =~ /^<[Tt][Mm][Pp][Ll]_[Ii][Ff]/) {
+          $options->{debug} and print STDERR "### HTML::Template Debug ### $line_number : IF $name start\n";
+
           defined($name) or die "HTML::Template->new() : found TMPL_IF with no name at $line_number!";
-          $options->{debug} and print "$line_number : saw if $name : \"$line\"\n";
 
           defined $escape and 
             die "HTML::Template->new() : Found ESCAPE option in a TMPL_IF tag at line $line_number.  ESCAPE is only valid for TMPL_VARs.";
@@ -983,7 +1057,7 @@ sub _parse {
           next PASS;
 
         } elsif ($which =~ /^<\/[Tt][Mm][Pp][Ll]_[Ii][Ff]/x) {
-          $options->{debug} and print "$line_number : saw /if : \"$line\"\n";
+          $options->{debug} and print STDERR "### HTML::Template Debug ###$line_number : IF end\n";
 
           defined $escape and 
             die "HTML::Template->new() : Found ESCAPE option in a /TMPL_IF tag at line $line_number.  ESCAPE is only valid for TMPL_VARs.";
@@ -1010,7 +1084,7 @@ sub _parse {
           next PASS;
 
         } elsif ($which =~ /^<[Tt][Mm][Pp][Ll]_[Ee][Ll][Ss][Ee]/) {
-          $options->{debug} and print "$line_number : saw else : \"$line\"\n";
+          $options->{debug} and print STDERR "### HTML::Template Debug ### $line_number : ELSE\n";
 
           defined $escape and 
             die "HTML::Template->new() : Found ESCAPE option in a TMPL_ELSE tag at line $line_number.  ESCAPE is only valid for TMPL_VARs.";
@@ -1063,6 +1137,12 @@ sub _parse {
   scalar(@ifstack) and die "HTML::Template->new() : At least one <TMPL_IF> not terminated at end of file!";
   scalar(@loopstack) and die "HTML::Template->new() : At least one <TMPL_LOOP> not terminated at end of file!";
 
+  # want a stack dump?
+  if ($options->{debug_stack}) {
+    require 'Data/Dumper.pm';
+    print STDERR "### HTML::Template _param Stack Dump ###\n\n", Data::Dumper::Dumper($self->{parse_stack}), "\n";
+  }
+
   # all done with template
   delete $self->{template};
 }
@@ -1114,9 +1194,8 @@ sub param {
     
     # check for parameter existence 
     $options->{die_on_bad_params} and !exists($param_map->{$param}) and
-      die("HTML::Template : Attempt to get nonexistent parameter $param");
+      die("HTML::Template : Attempt to get nonexistent parameter $param : (die_on_bad_params set => 1)");
     
-
     return undef unless (exists($param_map->{$param}) and
                          defined($param_map->{$param}));
 
@@ -1130,7 +1209,7 @@ sub param {
     $param = lc($param);
     # check that this param exists in the template
     $options->{die_on_bad_params} and !exists($param_map->{$param}) and
-      die("HTML::Template : Attempt to set nonexistent parameter $param");
+      die("HTML::Template : Attempt to set nonexistent parameter $param : (die_on_bad_params => 1)");
     
     return unless (exists($param_map->{$param}) and
                    defined($param_map->{$param}));
@@ -1204,10 +1283,12 @@ sub output {
   my $self = shift;
   my $options = $self->{options};
 
-  $options->{debug} and print "\nIn output $self\n\n";
+  $options->{debug} and print STDERR "### HTML::Template Debug ### In output $self\n";
+
+  # want a stack dump?
   if ($options->{debug_stack}) {
     require 'Data/Dumper.pm';
-    print Data::Dumper::Dumper($self->{parse_stack}), "\n";
+    print STDERR "### HTML::Template output Stack Dump ###\n\n", Data::Dumper::Dumper($self->{parse_stack}), "\n";
   }
 
   # support the associate magic, searching for undefined params and
@@ -1385,17 +1466,21 @@ __END__
 In the interest of greater understanding I've started a FAQ section of
 the perldocs.  Please look in here before you send me email.
 
+=head2 Is there a place to go to discuss HTML::Template and/or get help?
+
+There's a mailing-list for HTML::Template at htmltmpl@lists.vm.com.
+Send a blank message to htmltmpl-subscribe@lists.vm.com to join!
+
 =head2 I want support for <TMPL_XXX>!  How about it?
 
-Maybe.  I definitely encourage people to send me their ideas for
-HTML::Template, but you should realize that I have a strong desire to
-keep HTML::Template simple.  Please be ready to explain to me how the
-new tag fits in with HTML::Template's mission to provide a fast,
-lightweight system for using HTML templates.
+Maybe.  I definitely encourage people to discuss their ideas for
+HTML::Template on the mailing list.  Please be ready to explain to me
+how the new tag fits in with HTML::Template's mission to provide a
+fast, lightweight system for using HTML templates.
 
 NOTE: Offering to program said addition and provide it in the form of
 a patch to the most recent version of HTML::Template will definitely
-have a softening effect of my resolve!
+have a softening effect on potential opponents!
 
 =head2 I found a bug, can you fix it?
 
@@ -1418,8 +1503,8 @@ According to _Mastering_Regular_Expressions_ from O'Reilly Press,
 double against long strings.  //i essentially does a lc() on the
 string and keeps a temporary copy in memory.
 
-When this changes, and I'm told it will, I will gladly use //i.
-Believe me, I realize [Tt] is hideously ugly.
+When this changes, and it is in the 5.6 development series, I will
+gladly use //i.  Believe me, I realize [Tt] is hideously ugly.
 
 =head2 How can I pre-load my templates using cache-mode and mod_perl?
 
@@ -1454,10 +1539,16 @@ code and look for "CACHE MISS" messages in the logs.
 
 =head1 BUGS
 
-I am aware of no bugs - if you find one, email me (sam@tregar.com)
-with full details, including the VERSION of the module, a test script
-and a test template demonstrating the problem.  Please see the
-FREQUENTLY ASKED QUESTIONS above before you mail me!
+I am aware of no bugs - if you find one, join the mailing list and
+tell us about it (htmltmpl@lists.vm.com).  You can join the
+HTML::Template mailing-list by sending a blank email to
+htmltmpl-subscribe@lists.vm.com.  Of course, you can still email me
+directly (sam@tregar.com) with bugs, but I reserve the right to
+forward said bug reports to the mailing list.
+
+When submitting bug reports, be sure to include full details,
+including the VERSION of the module, a test script and a test template
+demonstrating the problem!
 
 =head1 CREDITS
 
@@ -1486,7 +1577,9 @@ Thanks!
 
 =head1 AUTHOR
 
-Sam Tregar, sam@tregar.com
+Sam Tregar, sam@tregar.com (you can also find me on the mailing list
+at htmltmpl@lists.vm.com - join it by sending a blank message to
+htmltmpl-subscribe@lists.vm.com).
 
 =head1 LICENSE
 

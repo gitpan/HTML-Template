@@ -78,3 +78,8 @@ Revision history for Perl extension HTML::Template.
         - even *more* code cleanup!
         - new FAQ concerning pre-loading templates and mod_perl.
 
+1.0 Fri October 28 12:00:00 1999
+        - An HTML::Template mailing-list!  Send a blank message to
+          htmltmpl-subscribe@lists.vm.com to join.
+        - bug fixes
+        - improved docs
