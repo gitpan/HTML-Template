@@ -33,6 +33,7 @@ templates/include_path/b.tmpl
 templates/multiline_tags.tmpl
 templates/newline_test1.tmpl
 templates/newline_test2.tmpl
+templates/case_loop.tmpl
 scripts/time_trial.pl
 scripts/clean_shm.pl
 README

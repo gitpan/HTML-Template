@@ -632,7 +632,7 @@ ok($output =~ /1 : Foo/);
 $template = HTML::Template->new(
                                 scalarref => \ "\n<TMPL_INCLUDE templates/simple.tmpl>",
                                );
-$template->param(ADJECTIVE => sub { "3y"; });
+$template->param(ADJECTIVE => "3y");
 $output = $template->output();
 ok($output =~ /3y/);
 
@@ -669,3 +669,20 @@ $template->param('ADJECTIVE', 'very');
 $output =  $template->output;
 ok($output !~ /ADJECTIVE/ and $template->param('ADJECTIVE') eq 'very');
 close(TEMPLATE);
+
+# test case sensitive loop variables
+$template = HTML::Template->new(path => ['templates'],
+                                filename => 'case_loop.tmpl',
+                                case_sensitive => 1,
+                               );
+$template->param(loop => [ { foo => 'bar', FOO => 'BAR' } ]);
+$output = $template->output();
+ok($output =~ /bar BAR/);
+
+# test ifs with code refd
+$template = HTML::Template->new(path => ['templates'],
+                                filename => 'if.tmpl');
+$template->param(bool => sub { 0 });
+$output = $template->output();
+ok($output !~ /INSIDE/ and $output =~ /unless/);
+

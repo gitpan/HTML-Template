@@ -1,6 +1,6 @@
 package HTML::Template;
 
-$HTML::Template::VERSION = '2.3';
+$HTML::Template::VERSION = '2.4';
 
 =head1 NAME
 
@@ -1027,7 +1027,7 @@ sub _new_from_loop {
                stack_debug => 0,
                die_on_bad_params => 1,
                associate => [],
-               loop_context_vars => 0,               
+               loop_context_vars => 0,
               );
   
   # load in options supplied to new()
@@ -1477,6 +1477,8 @@ sub _normalize_options {
         $template->{options}{debug} = $options->{debug};
         $template->{options}{stack_debug} = $options->{stack_debug};
         $template->{options}{die_on_bad_params} = $options->{die_on_bad_params};
+        $template->{options}{case_sensitive} = $options->{case_sensitive};
+
         push(@pstacks, $template->{parse_stack});
       }
     }
@@ -1914,6 +1916,7 @@ sub _parse {
 					   debug => $options->{debug}, 
 					   die_on_bad_params => $options->{die_on_bad_params}, 
 					   loop_context_vars => $options->{loop_context_vars},
+                                           case_sensitive => $options->{case_sensitive},
 					  );
 	
       } elsif ($which eq 'TMPL_IF' or $which eq 'TMPL_UNLESS' ) {
@@ -2184,8 +2187,9 @@ param() can be called in a number of ways
       # For simple TMPL_VARs:
       $self->param(PARAM => 'value');
 
-      # with a subroutine reference that gets called to get the value of
-      # the scalar.
+      # with a subroutine reference that gets called to get the value
+      # of the scalar.  The sub will recieve the template object as a
+      # parameter.
       $self->param(PARAM => sub { return 'value' });   
 
       # And TMPL_LOOPs:
@@ -2445,7 +2449,7 @@ sub output {
     if ($type eq 'SCALAR') {
       $result .= $$line;
     } elsif ($type eq 'HTML::Template::VAR' and ref($$line) eq 'CODE') {
-      defined($$line) and $result .= $$line->();
+      defined($$line) and $result .= $$line->($self);
     } elsif ($type eq 'HTML::Template::VAR') {
       defined($$line) and $result .= $$line;
     } elsif ($type eq 'HTML::Template::LOOP') {
@@ -2457,9 +2461,13 @@ sub output {
     } elsif ($type eq 'HTML::Template::COND') {
       if ($line->[HTML::Template::COND::JUMP_IF_TRUE]) {
         if ($line->[HTML::Template::COND::VARIABLE_TYPE] == HTML::Template::COND::VARIABLE_TYPE_VAR) {
-          $x = $line->[HTML::Template::COND::JUMP_ADDRESS] if
-            (defined $line->[HTML::Template::COND::VARIABLE] and
-             ${$line->[HTML::Template::COND::VARIABLE]});
+          if (defined ${$line->[HTML::Template::COND::VARIABLE]}) {
+            if (ref(${$line->[HTML::Template::COND::VARIABLE]}) eq 'CODE') {
+              $x = $line->[HTML::Template::COND::JUMP_ADDRESS] if ${$line->[HTML::Template::COND::VARIABLE]}->($self);
+            } else {
+              $x = $line->[HTML::Template::COND::JUMP_ADDRESS] if ${$line->[HTML::Template::COND::VARIABLE]};
+            }
+          }
         } else {
           $x = $line->[HTML::Template::COND::JUMP_ADDRESS] if
             (defined $line->[HTML::Template::COND::VARIABLE][HTML::Template::LOOP::PARAM_SET] and
@@ -2467,9 +2475,15 @@ sub output {
         }
       } else {
         if ($line->[HTML::Template::COND::VARIABLE_TYPE] == HTML::Template::COND::VARIABLE_TYPE_VAR) {
-          $x = $line->[HTML::Template::COND::JUMP_ADDRESS] if
-            (not defined $line->[HTML::Template::COND::VARIABLE] or
-             not ${$line->[HTML::Template::COND::VARIABLE]});
+          if (defined ${$line->[HTML::Template::COND::VARIABLE]}) {
+            if (ref(${$line->[HTML::Template::COND::VARIABLE]}) eq 'CODE') {
+              $x = $line->[HTML::Template::COND::JUMP_ADDRESS] unless ${$line->[HTML::Template::COND::VARIABLE]}->($self);
+            } else {
+              $x = $line->[HTML::Template::COND::JUMP_ADDRESS] unless ${$line->[HTML::Template::COND::VARIABLE]};
+            }
+          } else {
+            $x = $line->[HTML::Template::COND::JUMP_ADDRESS];
+          }
         } else {
           $x = $line->[HTML::Template::COND::JUMP_ADDRESS] if
             (not defined $line->[HTML::Template::COND::VARIABLE][HTML::Template::LOOP::PARAM_SET] or
@@ -2980,6 +2994,7 @@ provided by:
    Lance Thomas
    Roland Giersig
    Jere Julian
+   Peter Leonard
 
 Thanks!
 

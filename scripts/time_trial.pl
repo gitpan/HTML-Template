@@ -56,8 +56,8 @@ my %options = (
                'no cache' => {},
                #'simple cache' => { cache => 1 },
                # 'shared cache' => { shared_cache => 1, cache => 1 },
-               #'file cache' => { file_cache => 1, 
-               #                  file_cache_dir => './file_cache' },
+               'file cache' => { file_cache => 1, 
+                                 file_cache_dir => './file_cache' },
 #               'simple cache, no_includes' => { cache => 1, no_includes => 1},
 #               'blind cache' => { blind_cache => 1},
               );

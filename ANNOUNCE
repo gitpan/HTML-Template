@@ -1,22 +1,14 @@
-ANNOUNCEMENT: NEW VERSION: HTML::Template 2.3
+ANNOUNCEMENT: NEW VERSION: HTML::Template 2.4
 
 HTML::Template - a Perl module to use HTML Templates
 
 CHANGES
 
-2.3
+2.4
 
-- New Feature: template tags can now span lines.  (Roland Giersig)
+- Bug Fix: case_sensitive option broke loops (Peter Leonard)
 
-- New Feature: new() option 'filehandle'. (Roland Giersig)
-
-- Bug Fix: includes were broken in some cases using scalarref 
-           templates. (Lance Thomas)
-
-- Bug Fix: recursive include detection was broken for scalarref
-           templates. (Mark Stosberg)
-
-- Bug Fix: cleaned up more 5.004 warnings. (Jere Julian)
+- Bug Fix: code-ref params now work with IF and UNLESS
 
 
 DESCRIPTION
@@ -43,7 +35,7 @@ AVAILABILITY
 
 This module is available on SourceForge.  Download it at:
 
-  http://download.sourceforge.net/HTML-Template/HTML-Template-2.3.tar.gz
+  http://prdownloads.sourceforge.net/html-template/HTML-Template-2.4.tar.gz
 
 The module is also available on CPAN.  You can get it using CPAN.pm or
 go to:

@@ -197,3 +197,6 @@ Revision history for Perl extension HTML::Template.
       - Bug Fix: cleaned up more 5.004 warnings. (Jere Julian)
 
       
+2.4 Mon August 27 12:00:00 2001
+      - Bug Fix: case_sensitive option broke loops (Peter Leonard)
+      - Bug Fix: code-ref params now work with IF and UNLESS
