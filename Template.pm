@@ -1,6 +1,6 @@
 package HTML::Template;
 
-$HTML::Template::VERSION = '1.6';
+$HTML::Template::VERSION = '1.7';
 
 =head1 NAME
 
@@ -653,22 +653,25 @@ memory usage to STDERR.  Requires the GTop module.  Defaults to 0.
 use integer; # no floating point math so far!
 use strict; # and no funny business, either.
 
+use Carp; # generate better errors with more context
+
 # define accessor constants used to improve readability of array
-# accesses into "objects".
+# accesses into "objects".  I used to use 'use constant' but that
+# seems to cause occasional irritating warnings in older Perls.
 package HTML::Template::LOOP;
 sub TEMPLATE_HASH { 0; }
 sub PARAM_SET { 1 };
 
 package HTML::Template::COND;
-use constant VARIABLE => 0;
-use constant VARIABLE_TYPE => 1;
-use constant VARIABLE_TYPE_VAR => 0;
-use constant VARIABLE_TYPE_LOOP => 1;
-use constant JUMP_IF_TRUE => 2;
-use constant JUMP_ADDRESS => 3;
-use constant WHICH => 4;
-use constant WHICH_IF => 0;
-use constant WHICH_UNLESS => 1;
+sub VARIABLE { 0 };
+sub VARIABLE_TYPE { 1 };
+sub VARIABLE_TYPE_VAR { 0 };
+sub VARIABLE_TYPE_LOOP { 1 };
+sub JUMP_IF_TRUE { 2 };
+sub JUMP_ADDRESS { 3 };
+sub WHICH { 4 };
+sub WHICH_IF { 0 };
+sub WHICH_UNLESS { 1 };
 
 # back to the main package scope.
 package HTML::Template;
@@ -714,7 +717,7 @@ sub new {
   
   # load in options supplied to new()
   for (my $x = 0; $x <= $#_; $x += 2) {
-    defined($_[($x + 1)]) or die "HTML::Template->new() called with odd number of option parameters - should be of the form option => value";
+    defined($_[($x + 1)]) or croak("HTML::Template->new() called with odd number of option parameters - should be of the form option => value");
     $options->{lc($_[$x])} = $_[($x + 1)]; 
   }
 
@@ -734,10 +737,10 @@ sub new {
 
   # handle the "type", "source" parameter format (does anyone use it?)
   if (exists($options->{type})) {
-    exists($options->{source}) or die "HTML::Template->new() called with 'type' parameter set, but no 'source'!";
+    exists($options->{source}) or croak("HTML::Template->new() called with 'type' parameter set, but no 'source'!");
     ($options->{type} eq 'filename' or $options->{type} eq 'scalarref' or
      $options->{type} eq 'arrayref') or
-       die "HTML::Template->new() : type parameter must be set to 'filename', 'arrayref' or 'scalarref'!";
+       croak("HTML::Template->new() : type parameter must be set to 'filename', 'arrayref' or 'scalarref'!");
     $options->{$options->{type}} = $options->{source};
     delete $options->{type};
     delete $options->{source};
@@ -757,7 +760,7 @@ sub new {
   # make sure objects in associate area support param()
   foreach my $object (@{$options->{associate}}) {
     defined($object->can('param')) or
-      die "HTML::Template->new called with associate option, containing object of type " . ref($object) . " which lacks a param() method!";
+      croak("HTML::Template->new called with associate option, containing object of type " . ref($object) . " which lacks a param() method!");
   } 
 
 
@@ -767,14 +770,14 @@ sub new {
   exists($options->{arrayref}) and $source_count++;
   exists($options->{scalarref}) and $source_count++;
   if ($source_count != 1) {
-    die "HTML::Template->new called with multiple (or no) template sources specified!  A valid call to new() has exactly one filename => 'file' OR exactly one scalarRef => \\\$scalar OR exactly one arrayRef => \\\@array";    
+    croak("HTML::Template->new called with multiple (or no) template sources specified!  A valid call to new() has exactly one filename => 'file' OR exactly one scalarRef => \\\$scalar OR exactly one arrayRef => \\\@array");    
   }
 
   # do some memory debugging - this is best started as early as possible
   if ($options->{memory_debug}) {
     # memory_debug needs GTop
     eval { require 'GTop.pm'; };
-    die "Could not load GTop.  You must have GTop installed to use HTML::Template in memory_debug mode.  The error was: $@"
+    croak("Could not load GTop.  You must have GTop installed to use HTML::Template in memory_debug mode.  The error was: $@")
       if ($@);
     $self->{gtop} = GTop->new();
     $self->{proc_mem} = $self->{gtop}->proc_mem($$);
@@ -784,7 +787,7 @@ sub new {
   if ($options->{shared_cache}) {
     # shared_cache needs some extra modules loaded
     eval { require 'IPC/SharedCache.pm'; };
-    die "Could not load IPC::SharedCache.  You must have IPC::SharedCache installed to use HTML::Template in shared_cache mode.  The error was: $@"
+    croak("Could not load IPC::SharedCache.  You must have IPC::SharedCache installed to use HTML::Template in shared_cache mode.  The error was: $@")
       if ($@);
 
     # initialize the shared cache
@@ -840,7 +843,7 @@ sub _new_from_loop {
   
   # load in options supplied to new()
   for (my $x = 0; $x <= $#_; $x += 2) { 
-    defined($_[($x + 1)]) or die "HTML::Template->new() called with odd number of option parameters - should be of the form option => value";
+    defined($_[($x + 1)]) or croak("HTML::Template->new() called with odd number of option parameters - should be of the form option => value");
     $options->{lc($_[$x])} = $_[($x + 1)]; 
   }
 
@@ -970,7 +973,7 @@ sub _commit_to_cache {
   my $filepath = $options->{filepath};
   if (not defined $filepath) {
     $filepath = $self->_find_file($options->{filename});
-    die "HTML::Template->new() : Cannot open included file $options->{filename} : file not found."
+    confess("HTML::Template->new() : Cannot open included file $options->{filename} : file not found.")
       unless defined($filepath);
     $options->{filepath} = $filepath;   
   }
@@ -1150,12 +1153,12 @@ sub _init_template {
     my $filepath = $options->{filepath};
     if (not defined $filepath) {
       $filepath = $self->_find_file($options->{filename});
-      die "HTML::Template->new() : Cannot open included file $options->{filename} : file not found."
+      confess("HTML::Template->new() : Cannot open included file $options->{filename} : file not found.")
         unless defined($filepath);
       # we'll need this for future reference - to call stat() for example.
       $options->{filepath} = $filepath;   
     }
-    die "HTML::Template->new() : Cannot open included file $options->{filename} : $!"
+    confess("HTML::Template->new() : Cannot open included file $options->{filename} : $!")
       unless defined(open(TEMPLATE, $filepath));
     
     # read into the array, note the mtime for the record
@@ -1182,7 +1185,7 @@ sub _init_template {
 
     delete($options->{arrayref});
   } else {
-    die("HTML::Template : Need to call new with filename, scalarref or arrayref parameter specified.");
+    confess("HTML::Template : Need to call new with filename, scalarref or arrayref parameter specified.");
   }
 
   print STDERR "### HTML::Template Memory Debug ### END INIT_TEMPLATE ", $self->{proc_mem}->size(), "\n"
@@ -1873,7 +1876,7 @@ sub param {
     
     # check for parameter existence 
     $options->{die_on_bad_params} and !exists($param_map->{$param}) and
-      die("HTML::Template : Attempt to get nonexistent parameter $param : (die_on_bad_params set => 1)");
+      croak("HTML::Template : Attempt to get nonexistent parameter '$param' - this parameter name doesn't match any declarations in the template file : (die_on_bad_params set => 1)");
     
     return undef unless (exists($param_map->{$param}) and
                          defined($param_map->{$param}));
@@ -1884,14 +1887,14 @@ sub param {
   } 
 
   if (!scalar(@_)) {
-    die "HTML::Template->param() : Single reference arg to param() must be a hash-ref!  You gave me a $type." 
+    croak("HTML::Template->param() : Single reference arg to param() must be a hash-ref!  You gave me a $type.")
       unless $type eq 'HASH' or (ref($first) and $first->isa('HASH'));  
     push(@_, %$first);
   } else {
     unshift(@_, $first);
   }
   
-  die "HTML::Template->param() : You gave me an odd number of parameters to param()!"
+  croak("HTML::Template->param() : You gave me an odd number of parameters to param()!")
     unless ((@_ % 2) == 0);
 
   # strangely, changing this to a "while(@_) { shift, shift }" type
@@ -1903,7 +1906,7 @@ sub param {
     
     # check that this param exists in the template
     $options->{die_on_bad_params} and !exists($param_map->{$param}) and
-      die("HTML::Template : Attempt to set nonexistent parameter $param : (die_on_bad_params => 1)");
+      croak("HTML::Template : Attempt to set nonexistent parameter '$param' - this parameter name doesn't match any declarations in the template file : (die_on_bad_params => 1)");
     
     # if we're not going to die from bad param names, we need to ignore
     # them...
@@ -1914,15 +1917,17 @@ sub param {
     my $value_type = ref($value);
     if (defined($value_type) and length($value_type) and ($value_type eq 'ARRAY' or ((ref($value) !~ /^(CODE)|(HASH)|(SCALAR)$/) and $value->isa('ARRAY')))) {
       (ref($param_map->{$param}) eq 'HTML::Template::LOOP') or
-        die "HTML::Template::param() : attempt to set parameter $param with an array ref - parameter is not a TMPL_LOOP!";
+        croak("HTML::Template::param() : attempt to set parameter '$param' with an array ref - parameter is not a TMPL_LOOP!");
       $param_map->{$param}[HTML::Template::LOOP::PARAM_SET] = [@{$value}];
     } else {
       (ref($param_map->{$param}) eq 'HTML::Template::VAR') or
-        die "HTML::Template::param() : attempt to set parameter $param with a scalar - parameter is not a TMPL_VAR!";
+        croak("HTML::Template::param() : attempt to set parameter '$param' with a scalar - parameter is not a TMPL_VAR!");
       ${$param_map->{$param}} = $value;
     }
   }
 }
+
+=pod
 
 =head2 clear_params()
 
@@ -1948,7 +1953,7 @@ sub associateCGI {
   my $self = shift;
   my $cgi  = shift;
   (ref($cgi) eq 'CGI') or
-    die("Warning! non-CGI object was passed to HTML::Template::associateCGI()!\n");
+    croak("Warning! non-CGI object was passed to HTML::Template::associateCGI()!\n");
   push(@{$self->{options}{associate}}, $cgi);
   return 1;
 }
@@ -2028,8 +2033,11 @@ sub output {
     } elsif ($type eq 'HTML::Template::VAR') {
       defined($$line) and $result .= $$line;
     } elsif ($type eq 'HTML::Template::LOOP') {
-      defined($line->[HTML::Template::LOOP::PARAM_SET]) and 
-        $result .= $line->output($x, $options->{loop_context_vars});
+      if (defined($line->[HTML::Template::LOOP::PARAM_SET])) {
+        eval { $result .= $line->output($x, $options->{loop_context_vars}); };
+        croak("HTML::Template->output() : fatal error in loop output : $@") 
+          if $@;
+      }
     } elsif ($type eq 'HTML::Template::COND') {
       if ($line->[HTML::Template::COND::JUMP_IF_TRUE]) {
         if ($line->[HTML::Template::COND::VARIABLE_TYPE] == HTML::Template::COND::VARIABLE_TYPE_VAR) {
@@ -2079,11 +2087,11 @@ sub output {
           for (0..255) { $URLESCAPE_MAP{chr($_)} = sprintf('%%%02X', $_); }
         }
         # do the translation (RFC 2396 ^uric)
-	$toencode =~ s/([^;\/?:@&=+\$,A-Za-z0-9\-_.!~*'()])/$URLESCAPE_MAP{$1}/g;
+        $toencode =~ s!([^a-zA-Z0-9_.\-])!$URLESCAPE_MAP{$1}!g;
         $result .= $toencode;
       }
     } else {
-      die "HTML::Template::output() : Unknown item in parse_stack : " . $type;
+      confess("HTML::Template::output() : Unknown item in parse_stack : " . $type);
     }
   }
 
@@ -2091,6 +2099,157 @@ sub output {
     if $options->{memory_debug};
 
   return $result;
+}
+
+=pod
+
+=head2 query()
+
+This method allow you to get information about the template structure.
+It can be called in a number of ways.  The simplest usage of query is
+simply to check whether a parameter name exists in the template, using
+the C<name> option:
+
+  if ($template->query(name => 'foo')) {
+    # do something if a varaible of any type 
+    # named FOO is in the template
+  }
+
+This same usage returns the type of the parameter.  The type is the
+same as the tag minus the leading 'TMPL_'.  So, for example, a
+TMPL_VAR parameter returns 'VAR' from query().
+
+  if ($template->query(name => 'foo') eq 'VAR') {
+    # do something if FOO exists and is a TMPL_VAR
+  }
+
+Note that the variables associated with TMPL_IFs and TMPL_UNLESSs will
+be identified as 'VAR' unless they are also used in a TMPL_LOOP, in
+which case they will return 'LOOP'.
+
+C<query()> also allows you to get a list of parameters inside a loop
+(and inside loops inside loops).  Example loop:
+
+   <TMPL_LOOP NAME="EXAMPLE_LOOP">
+     <TMPL_VAR NAME="BEE">
+     <TMPL_VAR NAME="BOP">
+     <TMPL_LOOP NAME="EXAMPLE_INNER_LOOP">
+       <TMPL_VAR NAME="INNER_BEE">
+       <TMPL_VAR NAME="INNER_BOP">
+     </TMPL_LOOP>
+   </TMPL_LOOP>
+
+And some query calls:
+  
+  # returns 'LOOP'
+  $type = $template->query(name => 'EXAMPLE_LOOP');
+    
+  # returns ('bop', 'bee', 'example_inner_loop')
+  @param_names = $template->query(loop => 'EXAMPLE_LOOP');
+
+  # both return 'VAR'
+  $type = $template->query(name => ['EXAMPLE_LOOP', 'BEE']);
+  $type = $template->query(name => ['EXAMPLE_LOOP', 'BOP']);
+
+  # and this one returns 'LOOP'
+  $type = $template->query(name => ['EXAMPLE_LOOP', 
+                                    'EXAMPLE_INNER_LOOP']);
+  
+  # and finally, this returns ('inner_bee', 'inner_bop')
+  @inner_param_names = $template->query(loop => ['EXAMPLE_LOOP',
+                                                 'EXAMPLE_INNER_LOOP']);
+
+  # for non existent parameter names you get undef
+  # this returns undef.
+  $type = $template->query(name => 'DWEAZLE_ZAPPA');
+
+  # calling loop on a non-loop parameter name will cause an error.
+  # this dies:
+  $type = $template->query(loop => 'DWEAZLE_ZAPPA');
+
+As you can see above the C<loop> option returns a list of parameter
+names and both C<name> and C<loop> take array refs in order to refer
+to parameters inside loops.  It is an error to use C<loop> with a
+parameter that is not a loop.
+
+Note that all the names are returned in lowercase and the types are
+uppercase.
+
+Just like C<param()>, C<query()> with no arguements returns all the
+parameter names in the template at the top level.
+
+=cut
+
+sub query {
+  my $self = shift;
+  $self->{options}{debug} and print STDERR "### HTML::Template Debug ### query(", join(', ', @_), ")\n";
+
+  # the no-parameter case - return $self->param()
+  return $self->param() unless scalar(@_);
+  
+  croak("HTML::Template::query() : Odd number of parameters passed to query!")
+    if (scalar(@_) % 2);
+  croak("HTML::Template::query() : Wrong number of parameters passed to query - should be 2.")
+    if (scalar(@_) != 2);
+
+  my ($opt, $path) = (lc shift, shift);
+  croak("HTML::Template::query() : invalid parameter ($opt)")
+    unless ($opt eq 'name' or $opt eq 'loop');
+
+  # make path an array unless it already is
+  $path = [$path] unless (ref $path);
+
+  # find the param in question.
+  my @objs = $self->_find_param(@$path);
+  return undef unless scalar(@objs);
+  my ($obj, $type);
+
+  # do what the user asked with the object
+  if ($opt eq 'name') {
+    # we only look at the first one.  new() should make sure they're
+    # all the same.
+    ($obj, $type) = (shift(@objs), shift(@objs));
+    return undef unless defined $obj;
+    return 'VAR' if $type eq 'HTML::Template::VAR';
+    return 'LOOP' if $type eq 'HTML::Template::LOOP';
+    croak("HTML::Template::query() : unknown object ($type) in param_map!");
+
+  } elsif ($opt eq 'loop') {
+    my %results;
+    while(@objs) {
+      ($obj, $type) = (shift(@objs), shift(@objs));
+      croak("HTML::Template::query() : Search path [", join(', ', @$path), "] doesn't end in a TMPL_LOOP - it is an error to use the 'loop' option on a non-loop parameter.  To avoid this problem you can use the 'name' option to query() to check the type first.") 
+        unless ((defined $obj) and ($type eq 'HTML::Template::LOOP'));
+      
+      # SHAZAM!  This bit extracts all the parameter names from all the
+      # loop objects for this name.
+      map {$results{$_} = 1} map { keys(%{$_->{'param_map'}}) }
+        values(%{$obj->[HTML::Template::LOOP::TEMPLATE_HASH]});
+    }
+    # this is our loop list, return it.
+    return keys(%results);   
+  }
+}
+
+# a function that returns the object(s) corresponding to a given path and
+# its (their) ref()(s).  Used by query() in the obvious way.
+sub _find_param {
+  my $self = shift;
+  my $spot = lc shift;
+
+  # get the obj and type for this spot
+  my $obj = $self->{'param_map'}{$spot};
+  return unless defined $obj;
+  my $type = ref $obj;
+
+  # return if we're here or if we're not but this isn't a loop
+  return ($obj, $type) unless @_;
+  return unless ($type eq 'HTML::Template::LOOP');
+
+  # recurse.  this is a depth first seach on the template tree, for
+  # the algorithm geeks in the audience.
+  return map { $_->_find_param(@_) }
+    values(%{$obj->[HTML::Template::LOOP::TEMPLATE_HASH]});
 }
 
 # HTML::Template::VAR, LOOP, etc are *light* objects - their internal
@@ -2134,7 +2293,7 @@ sub output {
   
   my $result = '';
   foreach my $value_set (@$value_sets_array) {
-    $template->param($value_set);
+    $template->param($value_set);    
     $result .= $template->output;
     $template->clear_params;
   }
@@ -2264,6 +2423,50 @@ code and look for "CACHE MISS" messages in the logs.
 
 Numbers, letters, '.', '/', '+', '-' and '_'.
 
+8) How can I execute a program from inside my template?  
+
+Short answer: you can't.  Longer answer: you shouldn't since this
+violates the fundamental concept behind HTML::Template - that design
+and code should be seperate.
+
+But, inevitably some people still want to do it.  At times it has even
+seemed that HTML::Template development might split over this issue, so
+I will attempt a compromise.  Here is a method you can use to allow
+your template authors to evaluate arbitrary perl scripts from within
+the template.
+
+First, tell all your designers that when they want to run a perl
+script named "program.pl" they should use a tag like:
+
+  <TMPL_VAR NAME="__execute_program.pl__">
+
+Then, have all your programmers call this subroutine instead of
+calling HTML::Template::new directly.  They still use the same
+parameters, but they also get the program execution.  
+
+  sub new_template {
+    # get the template object
+    my $template = HTML::Template->new(@_);
+    
+    # find program parameters and fill them in
+    my @params = $template->param();
+    for my $param (@params) {      
+       if ($param =~ /^__execute_(.*)__$/) {
+         $template->param($param, do($1));
+       }
+    }
+
+    # return the template object
+    return $template;
+  }
+
+The programs called in this way should return a string containing
+their output.  A more complicated subroutine could be written to
+capture STDOUT from the scripts, but this one is simple enough to
+include in the FAQ.  Another improvement would be to use query() to
+enable program execution inside loops.
+
+
 =head1 BUGS
 
 I am aware of no bugs - if you find one, join the mailing list and
@@ -2310,6 +2513,8 @@ provided by:
    Drew Taylor
    Tobias Brox
    Michael Lloyd
+   Simran Gambhir
+   Chris Houser <chouser@bluweb.com>
 
 Thanks!
 

@@ -535,3 +535,50 @@ if ($output =~ /[<>"]/) { #"
   print "ok 28\n";
 }
 
+# test query()
+$template = HTML::Template->new(filename => 'templates/query-test.tmpl',
+                               );
+if ($template->query(name => 'var') ne 'VAR') {
+  print STDERR "\$template->query(name => 'var') returned ", $template->query(name => 'var'), "\n";
+  die "not ok 29\n";
+}
+if ($template->query(name => 'EXAMPLE_LOOP') ne 'LOOP') {
+  print STDERR "\$template->query(name => 'EXAMPLE_LOOP') returned ", $template->query(name => 'EXAMPLE_LOOP'), "\n";
+  die "not ok 29\n";
+}
+
+my %params = map {$_ => 1} $template->query(loop => 'EXAMPLE_LOOP');
+unless (exists $params{bee}) {
+  die "not ok 29\n";
+}
+unless (exists $params{bop}) {
+  die "not ok 29\n";
+}
+unless (exists $params{example_inner_loop}) {
+  die "not ok 29\n";
+}
+if ($template->query(name => ['EXAMPLE_LOOP', 'EXAMPLE_INNER_LOOP']) ne 'LOOP'){
+  use Data::Dumper;
+  print STDERR Data::Dumper::Dumper(\($template->query(name => ['EXAMPLE_LOOP', 'EXAMPLE_INNER_LOOP']))), "\n";
+
+  die "not ok 29\n";
+}
+
+eval {
+  my @result = $template->query(loop => ['EXAMPLE_LOOP', 'BEE']);
+};
+if ($@ !~ /error/) {
+  die "not ok 29!", join(', ', $result[0]), ".\n";
+}
+
+print "ok 29\n";
+
+
+# test query()
+$template = HTML::Template->new(filename => 'templates/query-test2.tmpl',
+                               );
+my %p = map {$_ => 1} $template->query(loop => ['LOOP_FOO', 'LOOP_BAR']);
+unless (exists $p{foo} and exists $p{bar} and exists $p{bash}) {
+  die "not ok 30\n";
+}
+print "ok 30\n";

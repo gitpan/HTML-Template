@@ -133,3 +133,10 @@ Revision history for Perl extension HTML::Template.
       - Bug Fix: allow for blessed objects in calls to param()
         (thanks to Michael Lloyd and David Glasser)
       - Bug Fix: _mtime was broken in 1.5, fixed a typo.
+
+1.7 Fri March 24 12:00:00 2000
+      - New Feature: new method query() enables introspection into 
+        loops (Chris Houser)
+      - New Feature: Better error handling with Carp      
+      - Bug Fix: URLESCAPE was skipping some important escapes (Simran Gambhir)
+      - New FAQ: How can I execute a program from inside my template?

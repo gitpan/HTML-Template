@@ -66,9 +66,9 @@ In case this is your first module, the usual methods are:
         make install
 
 If you plan to use the shared memory cache you might want to test it
-before you install.  Make sure you have up-to-date copies of
-IPC::ShareLite and Storable installed (available from CPAN) and then
-do:
+before you install.  Make sure you have an up-to-date copy of
+IPC::SharedCache installed (available from the same place you got
+HTML::Template, either CPAN or SourceForge) and then do:
 
        TEST_SHARED_MEMORY=1 make test
 

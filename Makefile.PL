@@ -4,4 +4,5 @@ use ExtUtils::MakeMaker;
 WriteMakefile(
     'NAME'	=> 'HTML::Template',
     'VERSION_FROM' => 'Template.pm', # finds $VERSION
+    'PREREQ_PM' => {Carp => 0},
 );

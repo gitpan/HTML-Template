@@ -21,6 +21,8 @@ templates/recursive.tmpl
 templates/context.tmpl
 templates/loop-if.tmpl
 templates/urlescape.tmpl
+templates/query-test.tmpl
+templates/query-test2.tmpl
 scripts/time_trial.pl
 scripts/clean_shm.pl
 README

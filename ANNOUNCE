@@ -1,20 +1,20 @@
-ANNOUNCEMENT: NEW VERSION: HTML::Template 1.6
+ANNOUNCEMENT: NEW VERSION: HTML::Template 1.7
 
 HTML::Template - a Perl module to use HTML Templates
 
 CHANGES
 
-1.6 
+1.7
 
-- New Feature: double_cache combines shared memory and local memory
-  caching for twice the speedup!
+- New Feature: new method query() enables introspection into loops
+               (Chris Houser)
 
-- New Feature: ESCAPE=URL does URL-style escaping (added by Tobias Brox)
+- New Feature: Better error handling with Carp
 
-- Bug Fix: allow for blessed objects in calls to param()
-        (thanks to Michael Lloyd and David Glasser)
+- Bug Fix: URLESCAPE was skipping some important escapes (Simran Gambhir)
+ 
+- New FAQ: How can I execute a program from inside my template?
 
-- Bug Fix: _mtime was broken in 1.5, fixed a typo.
 
 DESCRIPTION
 
@@ -36,7 +36,7 @@ AVAILABILITY
 
 This module is available on SourceForge.  Download it at:
 
-  http://download.sourceforge.net/HTML-Template/HTML-Template-1.6.tar.gz
+  http://download.sourceforge.net/HTML-Template/HTML-Template-1.7.tar.gz
 
 The module is also available on CPAN.  You can get it using CPAN.pm or
 go to:
