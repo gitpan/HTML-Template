@@ -35,24 +35,24 @@ Revision history for Perl extension HTML::Template.
           Blazer, Adriano Nagelschmidt Rodrigues, Andrej Mikus and
           Ilya Obshadko.  Thanks!
         
-0.05
+0.05  September 10th 1999 17:18
         - Added <TMPL_INCLUDE> functionality!
         - Added associate_CGI() method - donated by Richard Dice
         - Cleaned up internal access to new() options.
         - more bug fixes from such notables as Kevin Puetz, and Steve
           Reppucci.       
 
-0.051
+0.051  September 10th 1999 17:30
         - small problem with make test fixed.
 
-0.06 
+0.06  September 19th 1999 23:09 
         - added associate parameter to new() and obsoleted
           associate_CGI() (still supported for now)
         - added support for HTML_TEMPLATE_ROOT environment variable
         - small performance improvements using typeglobs
         - added a performance testing script: time_trial.pl
         
-0.9
+0.9  September 28th 1999 17:46
         - <TMPL_IF> and <TMPL_ELSE>
         - near total rewrite - faster, smaller, more "compiler-esque" code.
         - *MASSIVE* speedups in all modes - up to 10x faster!1
@@ -60,17 +60,17 @@ Revision history for Perl extension HTML::Template.
         - This really is version 0.9 so 1.0 is coming up.  Get those
           bug reports in!
 
-0.91
+0.91  September 29th 1999 17:59 
         - bug fix: possible loss of text after a </TMPL_IF>
           (Thanks to Tom Huskins for alerting me to this one!)
 
-0.95
+0.95  October 8th 1999 12:28 
         - bug fix: some lines were getting chomped (Eric Zylberstejn)
         - *NUMEROUS* bug fixes (David Glasser - Thanks a lot!)
         - new FAQ section in documentation
         - code cleanup and improved comments
 
-0.96 
+0.96  October 14th 1999 15:49
         - Added "ESCAPE=1" option to <TMPL_VAR> to HTML-escape
           variable values.  (Peter Marelas, thanks!)
         - more bug fixes (David Glasses, James William Carlson - 
@@ -89,3 +89,9 @@ Revision history for Perl extension HTML::Template.
         - Added "path" option to new() to manipulate search path for 
           templates.
         - bug fixes        
+
+1.2 Wed November 17 12:00:00 1990
+        - Added multi-parameter and hash-ref syntax for param() calls.
+        - Added DTD-compliant <!-- TMPL_* --> syntax patch from
+          Matthew Wickline - Thanks!
+        - vanguard_compatibility_mode = 1 implies die_on_bad_params = 0

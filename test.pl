@@ -267,3 +267,24 @@ if ($output =~ /[<>"]/) {
 } else {
   print "ok 16\n";
 }
+
+
+# test a simple template, using new param() call format
+my $template = HTML::Template->new(
+                                   filename => 'templates/simple.tmpl',
+                                   debug => 0
+                                  );
+
+$template->param(
+                 {
+                  'ADJECTIVE' => 'very'
+                 }
+                );
+my $output =  $template->output;
+if ($output =~ /ADJECTIVE/) {
+  die "not ok 2\n";
+} elsif ($output =~ /very/) {
+  print "ok 17\n";
+} else {
+  die "not ok 17\n";
+}

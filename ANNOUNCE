@@ -1,4 +1,4 @@
-ANNOUNCEMENT: NEW VERSION: HTML::Template 1.1
+ANNOUNCEMENT: NEW VERSION: HTML::Template 1.2
 
 NAME
 
@@ -6,12 +6,11 @@ HTML::Template - a Perl module to use HTML Templates
 
 CHANGES
 
-1.1 
-        - Lifted requirement that <TMPL_INCLUDE>s be alone on a line
-        - Added "path" option to new() to manipulate search path for 
-          templates.
-        - bug fixes        
-
+1.2
+        - Added multi-parameter and hash-ref syntax for param() calls.
+        - Added DTD-compliant <!-- TMPL_* --> syntax patch from
+          Matthew Wickline - Thanks!
+        - vanguard_compatibility_mode = 1 implies die_on_bad_params = 0
 
 DESCRIPTION
 

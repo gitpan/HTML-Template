@@ -1,6 +1,6 @@
 package HTML::Template;
 
-$HTML::Template::VERSION = '1.1';
+$HTML::Template::VERSION = '1.2';
 
 =head1 NAME
 
@@ -31,8 +31,10 @@ Now create a small CGI program:
   my $template = HTML::Template->new(filename => 'test.tmpl');
 
   # fill in some parameters
-  $template->param('HOME', $ENV{HOME});
-  $template->param('PATH', $ENV{PATH});
+  $template->param(
+      HOME => $ENV{HOME},
+      PATH => $ENV{PATH},
+  );
 
   # send the obligatory Content-Type
   print "Content-Type: text/html\n\n";
@@ -106,6 +108,18 @@ work as planned.
 
 The "NAME=" in the tag is optional, although for extensibility's sake I
 recommend using it.  Example - "<TMPL_LOOP LOOP_NAME>" is acceptable.
+
+If you're a fanatic about valid HTML and would like your templates
+to conform to valid HTML syntax, you may optionally type template tags
+in the form of HTML comments. This may be of use to HTML authors who
+would like to validate their templates' HTML syntax prior to
+HTML::Template processing, or who use DTD-savvy editing tools.
+
+  <!-- TMPL_VAR NAME=PARAM1 -->
+
+In order to realize a dramatic savings in bandwidth, the standard
+(non-comment) tags will be used throughout the rest of this
+documentation.
 
 =head2 <TMPL_VAR ?ESCAPE=1? NAME="PARAMETER_NAME">
 
@@ -255,8 +269,6 @@ After that the path in the environment variable HTML_TEMPLATE_ROOT is
 tried next.  Next, the "path" new() option is consulted.  As a final
 attempt, the filename is passed to open() directly.  See below for
 more information on HTML_TEMPLATE_ROOT and the "path" option to new().
-
-NOTE: Currently, each <TMPL_INCLUDE> must be on a seperate line by itself.
 
 =head2 <TMPL_IF NAME="CONTROL_PARAMETER_NAME"> </TMPL_IF>
 
@@ -432,13 +444,6 @@ considered obsolete.
 
 =item *
 
-no_includes - if you know that your template does not have
-TMPL_INCLUDE tags, then you can set no_includes to 1.  This will give
-a small performance gain, since the prepass for include tags can be
-skipped.  Defaults to 0.
-
-=item *
-
 path - you can set this variable with a list of paths to search for
 files specified with the "filename" option to new() and for files
 included with the <TMPL_INCLUDE> tag.  This list is only consulted
@@ -458,8 +463,9 @@ Example:
 
 vanguard_compatibility_mode - if set to 1 the module will expect to
 see <TMPL_VAR>s that look like %NAME% instead of the standard syntax.
-If you're not at Vanguard Media trying to use an old format template
-don't worry about this one.  Defaults to 0.
+Also sets die_on_bad_params => 0.  If you're not at Vanguard Media
+trying to use an old format template don't worry about this one.
+Defaults to 0.
 
 =item *
 
@@ -519,7 +525,6 @@ sub new {
                cache_debug => 0,
                die_on_bad_params => 1,
                vanguard_compatibility_mode => 0,
-               no_includes => 0,
                associate => [],
                path => []
               );
@@ -532,6 +537,10 @@ sub new {
 
   # blind_cache = 1 implies cache = 1
   $options->{blind_cache} and $options->{cache} = 1;
+
+  # vanguard_compatibility_mode implies die_on_bad_params = 1
+  $options->{vanguard_compatibility_mode} and 
+    $options->{die_on_bad_params} = 1;
 
   # handle the "type", "source" parameter format (does anyone use it?)
   if (exists($options->{type})) {
@@ -568,7 +577,7 @@ sub new {
   exists($options->{arrayref}) and $source_count++;
   exists($options->{scalarref}) and $source_count++;
   if ($source_count != 1) {
-    die "HTML::Template->new called with multiple (or no) template sources specified!  A valid call to new() has exactly one filename => 'file' OR exactly one scalarRef => \\\$scalar OR exactly one arrayRef = \\\@array";    
+    die "HTML::Template->new called with multiple (or no) template sources specified!  A valid call to new() has exactly one filename => 'file' OR exactly one scalarRef => \\\$scalar OR exactly one arrayRef => \\\@array";    
   }
 
   # initialize data structures
@@ -607,7 +616,7 @@ sub _new_from_loop {
   delete($options->{param_map});
   delete($options->{parse_stack});
 
-  return $self;
+ return $self;
 }
 
 # a few shortcuts to new(), of possible use...
@@ -771,9 +780,10 @@ sub _init_template {
 
       die "HTML::Template->new() : Cannot open template file $filename - file does not exist or is unreadable.";
     }
-    
-    $options->{filename} = $filepath;
 
+    # we'll need this for future reference - to call stat() for example.
+    $options->{filename} = $filepath;
+    
     # read into the array
     my @templateArray = <TEMPLATE>;
     close(TEMPLATE);
@@ -862,9 +872,10 @@ sub _parse {
       # a general regex to match any and all TMPL_* tags
 
       if ($line =~ /
-                    (.*?)
+                    (.*?<)
+                    (?:!--\s*)?
                     (
-                      <\/?[tT][mM][pP][lL]_
+                      \/?[tT][mM][pP][lL]_
                       (?:
                          (?:[Vv][Aa][Rr])
                          |
@@ -900,16 +911,17 @@ sub _parse {
                     )?
                     "?
                     \s*
-                    >
+                    (?:--)?>
                     (.*)
                    /sgx) {
         my $pre = $1; # what comes before
-        my $which = $2; # which tag is it
+        chop $pre; # remove trailing <
+        my $which = uc($2); # which tag is it
         my $escape = $3;
         my $name = lc $4; # what name for the tag?  undef for a /tag
         my $post = $5; # what comes after on the line
 
-        if ($which =~ /^<[tT][mM][pP][lL]_[Vv][Aa][Rr]/) {
+        if ($which eq 'TMPL_VAR') {
           $options->{debug} and print STDERR "### HTML::Template Debug ### $line_number : parsed VAR $name\n";
           
           # if we already have this var, then simply link to the existing
@@ -943,7 +955,7 @@ sub _parse {
           $line = $post;         
           next PASS;          
         
-        } elsif ($which =~ /^<[tT][mM][pP][lL]_[Ll][Oo][Oo][Pp]/) {
+        } elsif ($which eq 'TMPL_LOOP') {
          # we've got a loop start
           $options->{debug} and print STDERR "### HTML::Template Debug ### $line_number : LOOP $name start\n";
 
@@ -990,7 +1002,7 @@ sub _parse {
           $line = $post;
           next PASS;
 
-        } elsif ($which =~ /^<\/[tT][mM][pP][lL]_[Ll][Oo][Oo][Pp]/) {
+        } elsif ($which eq '/TMPL_LOOP') {
           $options->{debug} and print STDERR "### HTML::Template Debug ### $line_number : LOOP end\n";
 
           defined $escape and 
@@ -1036,7 +1048,7 @@ sub _parse {
           $line = $post;
           next PASS;
           
-        } elsif ($which =~ /^<[Tt][Mm][Pp][Ll]_[Ii][Ff]/) {
+        } elsif ($which eq 'TMPL_IF') {
           $options->{debug} and print STDERR "### HTML::Template Debug ### $line_number : IF $name start\n";
 
           defined($name) or die "HTML::Template->new() : found TMPL_IF with no name at $line_number!";
@@ -1074,14 +1086,14 @@ sub _parse {
           $line = $post;
           next PASS;
 
-        } elsif ($which =~ /^<\/[Tt][Mm][Pp][Ll]_[Ii][Ff]/x) {
+        } elsif ($which eq '/TMPL_IF') {
           $options->{debug} and print STDERR "### HTML::Template Debug ###$line_number : IF end\n";
 
           defined $escape and 
             die "HTML::Template->new() : Found ESCAPE option in a /TMPL_IF tag at line $line_number.  ESCAPE is only valid for TMPL_VARs.";
 
           my $if = pop(@ifstack);
-          die "HTML::Template->new() : found </TMPL_IF|ELSE> with no matching <TMPL_IF|ELSE> at $line_number!" unless defined $if;
+          die "HTML::Template->new() : found </TMPL_IF> with no matching <TMPL_IF|ELSE> at $line_number!" unless defined $if;
 
           # push text coming before the tag onto the pstack,
           # concatenating with preceding text if possible.
@@ -1101,7 +1113,7 @@ sub _parse {
           $line = $post;
           next PASS;
 
-        } elsif ($which =~ /^<[Tt][Mm][Pp][Ll]_[Ee][Ll][Ss][Ee]/) {
+        } elsif ($which eq 'TMPL_ELSE') {
           $options->{debug} and print STDERR "### HTML::Template Debug ### $line_number : ELSE\n";
 
           defined $escape and 
@@ -1132,7 +1144,7 @@ sub _parse {
           $line = $post;
           next PASS;
 
-        } elsif ($which =~ /^<[Tt][Mm][Pp][Ll]_[Ii][Nn][Cc][Ll][Uu][Dd][Ee]/) {
+        } elsif ($which eq 'TMPL_INCLUDE') {
           # handle TMPL_INCLUDEs
           $options->{debug} and print STDERR "### HTML::Template Debug ### $line_number : INCLUDE $name \n";
 
@@ -1254,7 +1266,7 @@ sub _parse {
 
 =head2 param
 
-param() can be called in three ways
+param() can be called in a number of ways
 
 
 1) To return a list of parameters in the template : 
@@ -1281,21 +1293,70 @@ param() can be called in three ways
                    ]
                   );
 
+4) To set the value of a a number of parameters :
+
+     # For simple TMPL_VARs:
+     $self->param(PARAM => 'value', 
+                  PARAM2 => 'value'
+                 );
+
+      # And with some TMPL_LOOPs:
+      $self->param(PARAM => 'value', 
+                   PARAM2 => 'value',
+                   LOOP_PARAM => 
+                   [ 
+                    { PARAM => VALUE_FOR_FIRST_PASS, ... }, 
+                    { PARAM => VALUE_FOR_SECOND_PASS, ... } 
+                    ...
+                   ],
+                   ANOTHER_LOOP_PARAM => 
+                   [ 
+                    { PARAM => VALUE_FOR_FIRST_PASS, ... }, 
+                    { PARAM => VALUE_FOR_SECOND_PASS, ... } 
+                    ...
+                   ]
+                  );
+
+5) To set the value of a a number of parameters using a hash-ref :
+
+      $self->param(
+                   { 
+                      PARAM => 'value', 
+                      PARAM2 => 'value',
+                      LOOP_PARAM => 
+                      [ 
+                        { PARAM => VALUE_FOR_FIRST_PASS, ... }, 
+                        { PARAM => VALUE_FOR_SECOND_PASS, ... } 
+                        ...
+                      ],
+                      ANOTHER_LOOP_PARAM => 
+                      [ 
+                        { PARAM => VALUE_FOR_FIRST_PASS, ... }, 
+                        { PARAM => VALUE_FOR_SECOND_PASS, ... } 
+                        ...
+                      ]
+                    }
+                   );
+
 =cut
 
 
 sub param {
-  my ($self, $param, $value) = @_;
+  my $self = shift;
   my $options = $self->{options};
   my $param_map = $self->{param_map};
   my $type;
 
-  if (!defined($param)) {
-    # return a list of parameters in this template
-    return keys(%{$param_map});
+  # the no-parameter case - return list of parameters in the template.
+  return keys(%{$param_map}) unless scalar(@_);
+  
+  my $first = shift;
+  my $type = ref $first;
 
-  } elsif (!defined($value)) {
-    $param = lc($param);
+  # the one-parameter case - could be a parameter value request or a
+  # hash-ref.
+  if (!scalar(@_) and !length($type)) {
+    my $param = lc $first;
     
     # check for parameter existence 
     $options->{die_on_bad_params} and !exists($param_map->{$param}) and
@@ -1310,29 +1371,45 @@ sub param {
     ($type eq 'HTML::Template::LOOP') and
       return $param_map->{$param}[HTML::Template::LOOP::PARAM_SET];
     die "Unknown param type $type!";
+  } 
+
+  if (!scalar(@_)) {
+    die "HTML::Template->param() : Single reference arg to param() must be a hash-ref!  You gave me a $type." 
+      unless $type eq 'HASH';  
+    push(@_, %{$first});
   } else {
-    $param = lc($param);
+    unshift(@_, $first);
+
+  }
+  
+  die "HTML::Template->param() : You gave me an odd number of parameters to param()!  Read the docs, man." 
+    unless ((@_ % 2) == 0);
+
+  for (my $x = 0; $x <= $#_; $x += 2) {
+    my $param = lc $_[$x];
+    my $value = $_[($x + 1)];
+
     # check that this param exists in the template
     $options->{die_on_bad_params} and !exists($param_map->{$param}) and
       die("HTML::Template : Attempt to set nonexistent parameter $param : (die_on_bad_params => 1)");
     
-    return unless (exists($param_map->{$param}) and
-                   defined($param_map->{$param}));
+    # if we're not going to do from bad param names, we need to ignore
+    # them...
+    next unless (exists($param_map->{$param}));
     
     # copy in contents of ARRAY refs to prevent confusion - 
     # thanks Richard!
-    $type = ref($param_map->{$param});
     if ( ref($value) eq 'ARRAY' ) {
-      ($type eq 'HTML::Template::LOOP') or
+      (ref($param_map->{$param}) eq 'HTML::Template::LOOP') or
         die "HTML::Template::param() : attempt to set parameter $param with an array ref - parameter is not a TMPL_LOOP!";
       $param_map->{$param}[HTML::Template::LOOP::PARAM_SET] = [@{$value}];
     } else {
-      ($type eq 'HTML::Template::VAR') or
+      (ref($param_map->{$param}) eq 'HTML::Template::VAR') or
         die "HTML::Template::param() : attempt to set parameter $param with a scalar - parameter is not a TMPL_VAR!";
       ${$param_map->{$param}} = $value;
     }
-    return 1;
   }
+  return 1;
 }
 
 =head2 clear_params()
@@ -1383,7 +1460,6 @@ important for the internal implementation of loops.
 =cut
 
 
-
 sub output {
   my $self = shift;
   my $options = $self->{options};
@@ -1418,7 +1494,8 @@ sub output {
   *parse_stack = $self->{parse_stack};
   my $result = '';
   my $type;
-  for (my $x = 0; $x <= $#parse_stack; $x++) {
+  my $parse_stack_length = $#parse_stack;
+  for (my $x = 0; $x <= $parse_stack_length; $x++) {
     *line = \$parse_stack[$x];
     $type = ref($line);
 
@@ -1506,9 +1583,7 @@ sub output {
   
   my $result = '';
   foreach my $value_set (@$value_sets_array) {
-    foreach my $name (keys %$value_set) {
-      $template->param($name, $value_set->{$name});
-    }
+    $template->param($value_set);
     $result .= $template->output;
     $template->clear_params;
   }
@@ -1683,6 +1758,7 @@ provided by:
    James William Carlson
    Frank D. Cringle
    Winfried Koenig
+   Matthew Wickline
 
 Thanks!
 
