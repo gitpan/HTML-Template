@@ -795,7 +795,7 @@ ok($output =~ /I AM OUTER/);
 ok($output =~ /I AM INNER 2/);
 
 # test javascript escaping
-$template = $template = HTML::Template->new(path => ['templates'],
+$template = HTML::Template->new(path => ['templates'],
                                             filename => 'js.tmpl');
 $template->param(msg => qq{"He said 'Hello'.\n\r"});
 $output = $template->output();
@@ -807,3 +807,32 @@ eval { $template = $template = HTML::Template->new(path => ['templates'],
 };
 like($@, qr/empty filename/);
 
+# test default escaping
+
+ok(exists $template->{options}->{default_escape} && !defined $template->{options}->{default_escape}, "default default_escape");
+
+$template = HTML::Template->new(path => ['templates'],
+                                            filename => 'default_escape.tmpl',
+                                            default_escape => 'UrL');
+is($template->{options}->{default_escape}, 'URL');
+$template->param(STUFF => q{Joined with space});
+$output = $template->output();
+like($output, qr{^Joined%20with%20space});
+
+$template = HTML::Template->new(path => ['templates'],
+                                            filename => 'default_escape.tmpl',
+                                            default_escape => 'html');
+$template->param(STUFF => q{Joined&with"cruft});
+$template->param(LOOP => [ { MORE_STUFF => '<&>' }, { MORE_STUFF => '>&<' } ]);
+$template->param(a => '<b>');
+$output = $template->output();
+like($output, qr{^Joined&amp;with&quot;cruft});
+like($output, qr{&lt;&amp;&gt;&gt;&amp;&lt;});
+like($output, qr{because it's &lt;b&gt;});
+
+eval {
+$template = HTML::Template->new(path => ['templates'],
+                                            filename => 'default_escape.tmpl',
+                                            default_escape => 'wml');
+};
+like($@, qr/Invalid setting for default_escape/);

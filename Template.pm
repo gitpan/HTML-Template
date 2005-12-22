@@ -1,6 +1,6 @@
 package HTML::Template;
 
-$HTML::Template::VERSION = '2.7';
+$HTML::Template::VERSION = '2.8';
 
 =head1 NAME
 
@@ -752,7 +752,7 @@ Example:
 
       <TMPL_UNLESS NAME="__odd__">
         This outputs every other pass, on the even passes.
-      </TMPL_IF>
+      </TMPL_UNLESS>
 
       <TMPL_IF NAME="__inner__">
         This outputs on passes that are neither first nor last.
@@ -762,7 +762,7 @@ Example:
 
       <TMPL_IF NAME="__last__">
         This only outputs on the last pass.
-      <TMPL_IF>
+      </TMPL_IF>
    </TMPL_LOOP>
 
 One use of this feature is to provide a "separator" similar in effect
@@ -879,6 +879,12 @@ specified.
 The specified filters will be called for any TMPL_INCLUDEed files just
 as they are for the main template file.
 
+=item * 
+
+default_escape - Set this parameter to "HTML", "URL" or "JS" and
+HTML::Template will apply the specified escaping to all variables
+unless they declare a different escape in the template.
+
 =back
 
 =back 4
@@ -897,7 +903,7 @@ use Digest::MD5 qw(md5_hex); # generate cache keys
 # accesses into "objects".  I used to use 'use constant' but that
 # seems to cause occasional irritating warnings in older Perls.
 package HTML::Template::LOOP;
-sub TEMPLATE_HASH () { 0; }
+sub TEMPLATE_HASH () { 0 };
 sub PARAM_SET     () { 1 };
 
 package HTML::Template::COND;
@@ -908,6 +914,8 @@ sub VARIABLE_TYPE_LOOP () { 1 };
 sub JUMP_IF_TRUE       () { 2 };
 sub JUMP_ADDRESS       () { 3 };
 sub WHICH              () { 4 };
+sub UNCONDITIONAL_JUMP () { 5 };
+sub IS_ELSE            () { 6 };
 sub WHICH_IF           () { 0 };
 sub WHICH_UNLESS       () { 1 };
 
@@ -955,6 +963,7 @@ sub new {
                no_includes => 0,
                case_sensitive => 0,
                filter => [],
+               default_escape => undef,
               );
   
   # load in options supplied to new()
@@ -1074,6 +1083,13 @@ sub new {
       max_size => $options->{ipc_max_size},
       ipc_segment_size => $options->{ipc_segment_size};
     $self->{cache} = \%cache;
+  }
+
+  if ($options->{default_escape}) {
+    $options->{default_escape} = uc $options->{default_escape};
+    unless ($options->{default_escape} =~ /^(HTML|URL|JS)$/) {
+      croak("HTML::Template->new(): Invalid setting for default_escape - '$options->{default_escape}'.  Valid values are HTML, URL or JS.");
+    }
   }
 
   print STDERR "### HTML::Template Memory Debug ### POST CACHE INIT ", $self->{proc_mem}->size(), "\n"
@@ -1952,7 +1968,8 @@ sub _parse {
 
       $which = uc($1); # which tag is it
 
-      $escape = defined $5 ? $5 : defined $15 ? $15 : 0; # escape set?
+      $escape = defined $5 ? $5 : defined $15 ? $15
+        : (defined $options->{default_escape} && $which eq 'TMPL_VAR') ? $options->{default_escape} : 0; # escape set?
       
       # what name for the tag?  undef for a /tag at most, one of the
       # following three will be defined
@@ -2108,7 +2125,7 @@ sub _parse {
 	# does _parse() - sub-templates get their parse_stack and
 	# param_map fed to them already filled in.
 	$loop->[HTML::Template::LOOP::TEMPLATE_HASH]{$starts_at}             
-	  = HTML::Template->_new_from_loop(
+	  = ref($self)->_new_from_loop(
 					   parse_stack => $parse_stack,
 					   param_map => $param_map,
 					   debug => $options->{debug}, 
@@ -2179,12 +2196,13 @@ sub _parse {
 	
 	my $cond = pop(@ifstack);
 	die "HTML::Template->new() : found <TMPL_ELSE> with no matching <TMPL_IF> or <TMPL_UNLESS> at $fname : line $fcounter." unless defined $cond;
-	
+        die "HTML::Template->new() : found second <TMPL_ELSE> tag for  <TMPL_IF> or <TMPL_UNLESS> at $fname : line $fcounter." if $cond->[HTML::Template::COND::IS_ELSE];	
 	
 	my $else = HTML::Template::COND->new($cond->[HTML::Template::COND::VARIABLE]);
 	$else->[HTML::Template::COND::WHICH] = $cond->[HTML::Template::COND::WHICH];
-	$else->[HTML::Template::COND::JUMP_IF_TRUE] = not $cond->[HTML::Template::COND::JUMP_IF_TRUE];
-	
+        $else->[HTML::Template::COND::UNCONDITIONAL_JUMP] = 1;
+	$else->[HTML::Template::COND::IS_ELSE] = 1;
+
 	# need end-block resolution?
 	if (defined($cond->[HTML::Template::COND::VARIABLE_TYPE])) {
 	  $else->[HTML::Template::COND::VARIABLE_TYPE] = $cond->[HTML::Template::COND::VARIABLE_TYPE];
@@ -2201,7 +2219,7 @@ sub _parse {
 	# the IF fails and falls though, output will reach the else
 	# and jump to the /if address.
 	$cond->[HTML::Template::COND::JUMP_ADDRESS] = $#pstack;
-	
+		
       } elsif ($which eq 'TMPL_INCLUDE') {
 	# handle TMPL_INCLUDEs
 	$options->{debug} and print STDERR "### HTML::Template Debug ### $fname : line $fcounter : INCLUDE $name \n";
@@ -2658,38 +2676,43 @@ sub output {
         croak("HTML::Template->output() : fatal error in loop output : $@") 
           if $@;
       }
-    } elsif ($type eq 'HTML::Template::COND') {
-      if ($line->[HTML::Template::COND::JUMP_IF_TRUE]) {
-        if ($line->[HTML::Template::COND::VARIABLE_TYPE] == HTML::Template::COND::VARIABLE_TYPE_VAR) {
-          if (defined ${$line->[HTML::Template::COND::VARIABLE]}) {
-            if (ref(${$line->[HTML::Template::COND::VARIABLE]}) eq 'CODE') {
-              $x = $line->[HTML::Template::COND::JUMP_ADDRESS] if ${$line->[HTML::Template::COND::VARIABLE]}->($self);
-            } else {
-              $x = $line->[HTML::Template::COND::JUMP_ADDRESS] if ${$line->[HTML::Template::COND::VARIABLE]};
-            }
-          }
-        } else {
-          $x = $line->[HTML::Template::COND::JUMP_ADDRESS] if
-            (defined $line->[HTML::Template::COND::VARIABLE][HTML::Template::LOOP::PARAM_SET] and
-             scalar @{$line->[HTML::Template::COND::VARIABLE][HTML::Template::LOOP::PARAM_SET]});
-        }
-      } else {
-        if ($line->[HTML::Template::COND::VARIABLE_TYPE] == HTML::Template::COND::VARIABLE_TYPE_VAR) {
-          if (defined ${$line->[HTML::Template::COND::VARIABLE]}) {
-            if (ref(${$line->[HTML::Template::COND::VARIABLE]}) eq 'CODE') {
-              $x = $line->[HTML::Template::COND::JUMP_ADDRESS] unless ${$line->[HTML::Template::COND::VARIABLE]}->($self);
-            } else {
-              $x = $line->[HTML::Template::COND::JUMP_ADDRESS] unless ${$line->[HTML::Template::COND::VARIABLE]};
+	} elsif ($type eq 'HTML::Template::COND') {
+    	
+     if ($line->[HTML::Template::COND::UNCONDITIONAL_JUMP]) {
+       $x = $line->[HTML::Template::COND::JUMP_ADDRESS]
+     } else {
+        if ($line->[HTML::Template::COND::JUMP_IF_TRUE]) {
+          if ($line->[HTML::Template::COND::VARIABLE_TYPE] == HTML::Template::COND::VARIABLE_TYPE_VAR) {
+            if (defined ${$line->[HTML::Template::COND::VARIABLE]}) {
+              if (ref(${$line->[HTML::Template::COND::VARIABLE]}) eq 'CODE') {
+                $x = $line->[HTML::Template::COND::JUMP_ADDRESS] if ${$line->[HTML::Template::COND::VARIABLE]}->($self);
+              } else {
+                $x = $line->[HTML::Template::COND::JUMP_ADDRESS] if ${$line->[HTML::Template::COND::VARIABLE]};
+              }
             }
           } else {
-            $x = $line->[HTML::Template::COND::JUMP_ADDRESS];
+            $x = $line->[HTML::Template::COND::JUMP_ADDRESS] if
+              (defined $line->[HTML::Template::COND::VARIABLE][HTML::Template::LOOP::PARAM_SET] and
+               scalar @{$line->[HTML::Template::COND::VARIABLE][HTML::Template::LOOP::PARAM_SET]});
           }
         } else {
-          $x = $line->[HTML::Template::COND::JUMP_ADDRESS] if
-            (not defined $line->[HTML::Template::COND::VARIABLE][HTML::Template::LOOP::PARAM_SET] or
-             not scalar @{$line->[HTML::Template::COND::VARIABLE][HTML::Template::LOOP::PARAM_SET]});
+          if ($line->[HTML::Template::COND::VARIABLE_TYPE] == HTML::Template::COND::VARIABLE_TYPE_VAR) {
+            if (defined ${$line->[HTML::Template::COND::VARIABLE]}) {
+              if (ref(${$line->[HTML::Template::COND::VARIABLE]}) eq 'CODE') {
+                $x = $line->[HTML::Template::COND::JUMP_ADDRESS] unless ${$line->[HTML::Template::COND::VARIABLE]}->($self);
+              } else {
+                $x = $line->[HTML::Template::COND::JUMP_ADDRESS] unless ${$line->[HTML::Template::COND::VARIABLE]};
+              }
+            } else {
+              $x = $line->[HTML::Template::COND::JUMP_ADDRESS];
+            }
+          } else {
+            $x = $line->[HTML::Template::COND::JUMP_ADDRESS] if
+              (not defined $line->[HTML::Template::COND::VARIABLE][HTML::Template::LOOP::PARAM_SET] or
+               not scalar @{$line->[HTML::Template::COND::VARIABLE][HTML::Template::LOOP::PARAM_SET]});
+          }
         }
-      }
+      }      	
     } elsif ($type eq 'HTML::Template::NOOP') {
       next;
     } elsif ($type eq 'HTML::Template::DEFAULT') {
@@ -2709,7 +2732,11 @@ sub output {
     } elsif ($type eq 'HTML::Template::ESCAPE') {
       *line = \$parse_stack[++$x];
       if (defined($$line)) {
-        $_ = $$line;
+        if (ref($$line) eq 'CODE') {
+            $_ = $$line->($self);
+        } else {
+            $_ = $$line;
+        }
         
         # straight from the CGI.pm bible.
         s/&/&amp;/g;
@@ -2725,7 +2752,11 @@ sub output {
       $x++;
       *line = \$parse_stack[$x];
       if (defined($$line)) {
-        $_ = $$line;
+        if (ref($$line) eq 'CODE') {
+            $_ = $$line->($self);
+        } else {
+            $_ = $$line;
+        }
         s/\\/\\\\/g;
         s/'/\\'/g;
         s/"/\\"/g;
@@ -2737,7 +2768,11 @@ sub output {
       $x++;
       *line = \$parse_stack[$x];
       if (defined($$line)) {
-        $_ = $$line;
+        if (ref($$line) eq 'CODE') {
+            $_ = $$line->($self);
+        } else {
+            $_ = $$line;
+        }
         # Build a char->hex map if one isn't already available
         unless (exists($URLESCAPE_MAP{chr(1)})) {
           for (0..255) { $URLESCAPE_MAP{chr($_)} = sprintf('%%%02X', $_); }
