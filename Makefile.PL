@@ -29,5 +29,6 @@ WriteMakefile(
                      'File::Spec' => 0.82, 
                      'Digest::MD5'=> 0,
                      'Test::More' => 0,
+                     'Scalar::Util' => 0,
                    },
 );

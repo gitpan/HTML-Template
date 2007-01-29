@@ -640,7 +640,8 @@ $template = HTML::Template->new(path => ['templates'],
                                );
 $template->param(FOO => 'foo!', bar => [{}, {}]);
 $output = $template->output();
-ok($output =~ /foo!\n/ && $output =~ /foo!foo!\nfoo!foo!/);
+ok($output =~ /foo!\n/);
+ok($output =~ /foo!foo!\nfoo!foo!/);
 
 # test new() from filehandle
 open(TEMPLATE, "templates/simple.tmpl");
@@ -809,7 +810,7 @@ like($@, qr/empty filename/);
 
 # test default escaping
 
-ok(exists $template->{options}->{default_escape} && !defined $template->{options}->{default_escape}, "default default_escape");
+ok(!exists $template->{options}->{default_escape}, "default default_escape");
 
 $template = HTML::Template->new(path => ['templates'],
                                             filename => 'default_escape.tmpl',
@@ -818,6 +819,15 @@ is($template->{options}->{default_escape}, 'URL');
 $template->param(STUFF => q{Joined with space});
 $output = $template->output();
 like($output, qr{^Joined%20with%20space});
+
+$template = HTML::Template->new(path => ['templates'],
+                                            filename => 'default_escape_off.tmpl',
+                                            default_escape => 'UrL');
+is($template->{options}->{default_escape}, 'URL');
+$template->param(STUFF => q{Joined with space});
+$output = $template->output();
+like($output, qr{^Joined with space});
+
 
 $template = HTML::Template->new(path => ['templates'],
                                             filename => 'default_escape.tmpl',
