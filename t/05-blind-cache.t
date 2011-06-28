@@ -1,45 +1,40 @@
 use strict;
 use warnings;
-use Test::More 
-# qw(no_plan);
-tests => 7;
+use File::Copy;
+use File::Temp;
+use File::Spec::Functions qw(curdir catfile);
+use Test::More tests => 4;
 
 use_ok('HTML::Template');
-use_ok('File::Copy');
+
+# use a temp file for the one that changes
+my $tmp = File::Temp->new(UNLINK => 1, SUFFIX => '.tmpl');
+
+ok(copy(catfile(curdir, 'templates', 'simple.tmpl'), $tmp), "copied simple.tmpl to temp file");
 
 my ($output, $template);
 # test cache - non automated, requires turning on debug watching STDERR!
 $template = HTML::Template->new(
-                                path => ['templates/'],
-                                filename => 'simple.tmpl',
-                                blind_cache => 1,
-                                #cache_debug => 1,
-                                debug => 0,
-                               );
+    filename    => $tmp,
+    blind_cache => 1,
+    debug       => 0,
+    cache_debug => 0,
+);
 $template->param(ADJECTIVE => sub { return 'v' . '1e' . '2r' . '3y'; });
-$output =  $template->output;
+$output = $template->output;
 
 sleep 1;
 
-ok( copy('templates/simple.tmpl', 'templates/notsosimple.tmpl'),
-	"stored simple.tmpl for later restoration");
-
-ok( copy('templates/simplemod.tmpl', 'templates/simple.tmpl'),
-	"poured new content into simple.tmpl to test blind_cache");
+# overwrite our temp file with a different template
+ok(copy(catfile(curdir, 'templates', 'simplemod.tmpl'), $tmp), "poured new content into template to test blind_cache");
 
 $template = HTML::Template->new(
-                                path => ['templates/'],
-                                filename => 'simple.tmpl',
-                                blind_cache => 1,
-                                #cache_debug => 1,
-                                debug => 0,
-                               );
+    filename    => $tmp,
+    blind_cache => 1,
+    debug       => 0,
+    cache_debug => 0,
+);
 ok($output =~ /v1e2r3y/, "output unchanged as expected");
-
-ok( copy('templates/notsosimple.tmpl', 'templates/simple.tmpl'),
-	"able to restore original content of simple.tmpl");
-ok( unlink('templates/notsosimple.tmpl'),
-	"able to unlink temporary file");
 
 =head1 NAME
 

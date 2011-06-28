@@ -1,34 +1,56 @@
-use ExtUtils::MakeMaker;
 
-# if this is Perl 5.8.0 then we need to check that the locale isn't
-# set to something UTF8-ish since that breaks this perl.  More to the
-# point, it breaks HTML::Template during 'make test' which leads to
-# the erroneous belief that the problem is in HTML::Template.
-if ($] >= 5.008) {    
-    my $perl = join('.', (map { ord($_) } split("", $^V, 3)));
-    if ($perl eq '5.8.0' and $ENV{LANG} and $ENV{LANG} =~ /UTF-?8/i) {
-        die <<END;
+use strict;
+use warnings;
 
-!!! Broken Perl Installation Detected !!!
 
-Your version of Perl (v5.8.0) must not be used with a UTF-8 locale
-setting.  You can fix this problem by either upgrading Perl to v5.8.1
-or later or by choosing a non-UTF-8 LANG setting (ex: en_US).  Redhat
-Linux users will find this setting in /etc/sysconfig/i18n.
 
-END
+use ExtUtils::MakeMaker 6.30;
+
+
+
+my %WriteMakefileArgs = (
+  'ABSTRACT' => 'Perl module to use HTML-like templating language',
+  'AUTHOR' => 'Michael Peters <mpeters@plusthree.com>',
+  'BUILD_REQUIRES' => {},
+  'CONFIGURE_REQUIRES' => {
+    'ExtUtils::MakeMaker' => '6.30'
+  },
+  'DISTNAME' => 'HTML-Template',
+  'EXE_FILES' => [],
+  'LICENSE' => 'perl',
+  'NAME' => 'HTML::Template',
+  'PREREQ_PM' => {
+    'Carp' => '0',
+    'Digest::MD5' => '0',
+    'File::Spec' => '0.82',
+    'File::Temp' => '0',
+    'Scalar::Util' => '0',
+    'Test::More' => '0'
+  },
+  'VERSION' => '2.10_1',
+  'test' => {
+    'TESTS' => 't/*.t'
+  }
+);
+
+
+unless ( eval { ExtUtils::MakeMaker->VERSION(6.56) } ) {
+  my $br = delete $WriteMakefileArgs{BUILD_REQUIRES};
+  my $pp = $WriteMakefileArgs{PREREQ_PM};
+  for my $mod ( keys %$br ) {
+    if ( exists $pp->{$mod} ) {
+      $pp->{$mod} = $br->{$mod} if $br->{$mod} > $pp->{$mod};
     }
+    else {
+      $pp->{$mod} = $br->{$mod};
+    }
+  }
 }
 
-# See lib/ExtUtils/MakeMaker.pm for details of how to influence
-# the contents of the Makefile that is written.
-WriteMakefile(
-    'NAME'	=> 'HTML::Template',
-    'VERSION_FROM' => 'Template.pm', # finds $VERSION
-    'PREREQ_PM' => { 'Carp'       => 0, 
-                     'File::Spec' => 0.82, 
-                     'Digest::MD5'=> 0,
-                     'Test::More' => 0,
-                     'Scalar::Util' => 0,
-                   },
-);
+delete $WriteMakefileArgs{CONFIGURE_REQUIRES}
+  unless eval { ExtUtils::MakeMaker->VERSION(6.52) };
+
+WriteMakefile(%WriteMakefileArgs);
+
+
+

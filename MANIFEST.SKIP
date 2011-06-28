@@ -1,0 +1,9 @@
+\.swp$
+\.swo$
+\.bak$
+\.git
+blib
+\.build$
+^MYMETA.yml$
+dzil.ini
+file_cache

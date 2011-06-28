@@ -1,3 +1,67 @@
+2.10 (in development)
+
+   - Feature: RT #18901 - Added new utf8 option to make it really simple
+     to use UTF-8 encoded templates [Michael Peters]
+
+   - Feature: RT #30586 - Added new open_mode option to allow for
+     Perl IO layers to interact when using open() on the template files
+     [moritz@faui2k3.org and Michael Peters]
+
+   - Feature: RT #38189 - Allow clean XML style tags "<tmpl_var foo />"
+     to be used as well. [allard@byte.nl]
+
+   - Feature: RT #46285 - Added support for lazily-evaluated coderefs
+     for TMPL_LOOPs. [Justin DeVuyst and Michael Peters]
+
+   - Feature: RT #64797 - Added new option die_on_missing_include (defaults
+     to true) that allows users to turn off the behavior of dieing when an 
+     include can't be found [Zdenek Styblik and Michael Peters]
+
+   - Feature: Add new cache_lazy_vars option so that the values from coderefs
+     used for TMPL_VARs can be cached and the coderef not run multiple times 
+     [Michael Peters]
+
+   - Feature: Add new cache_lazy_loops option so that the values from coderefs
+     used for TMPL_LOOPs can be cached and the coderef not run multiple times 
+     [Michael Peters]
+
+   - Feature: Added __even__, __outer__ and __index__ loop context vars. 
+     [Michael Peters]
+
+   - Bug Fix: RT #26456 - force_untaint can't work in Perl < 5.8.0
+     [admin@photoresearchers.com]
+
+   - Bug Fix: RT #35534 - Using the same loop multiple times with
+     different vars will no longer cause an error if die_on_bad_params 
+     is set. [Ron Savage & Michael Peters]
+
+   - Bug Fix: RT #38325 - Give a better error message if param() is set
+     with a reference to a reference. [Mark Stosberg & Michael Peters]
+
+   - Test Fix: RT #26103 - t/05-blind-cache.t no longer modifies the
+     distribution during the tests but instead uses temp files [Jan
+     Dubois and Michael Peters]
+
+   - Test Fix: Tests that create and modify files now use temp files
+     and file_cache_dir is always a temp directory [Michael Peters]
+
+   - Doc Fix: Using more POD formatting [Michael Peters]
+
+   - Doc Fix: RT #46244 - fix broken link to tutorial [Michael Peters]
+
+   - Doc Fix: RT #60282 - fix various mispellings [Florian Ernst]
+
+   - Doc Fix: RT #60283 - fix broken HTML example [Florian Ernst]
+
+   - Doc Fix: RT #60284 - fix broken POD [Florian Ernst and Michael Peters]
+
+   - Development: Moved development to GitHub
+     (https://github.com/mpeters/html-template)
+
+   - Development: Switched to using Dist::Zilla internally for release management
+
+   - Development: Added Michael Peters as co-maintainer
+
 2.9 Mon Jan 29 15:54:03 EST 2007
    - New Feature: the new force_untaint option makes sure you do not
      pass tainted values to param(). [Sven Neuhaus]
