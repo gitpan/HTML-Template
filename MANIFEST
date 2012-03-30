@@ -1,7 +1,6 @@
 Changes
 LICENSE
 MANIFEST
-MANIFEST.SKIP
 META.yml
 Makefile.PL
 README
@@ -44,6 +43,7 @@ t/13-loop-repeated.t
 t/14-includes.t
 t/15-comment.t
 t/99-old-test-pl.t
+t/release-pod-syntax.t
 t/testlib/IO/Capture.pm
 t/testlib/IO/Capture/ErrorMessages.pm
 t/testlib/IO/Capture/Stderr.pm

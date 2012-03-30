@@ -9,27 +9,28 @@ use ExtUtils::MakeMaker 6.30;
 
 
 my %WriteMakefileArgs = (
-  'ABSTRACT' => 'Perl module to use HTML-like templating language',
-  'AUTHOR' => 'Michael Peters <mpeters@plusthree.com>',
-  'BUILD_REQUIRES' => {},
-  'CONFIGURE_REQUIRES' => {
-    'ExtUtils::MakeMaker' => '6.30'
+  "ABSTRACT" => "Perl module to use HTML-like templating language",
+  "AUTHOR" => "Michael Peters <mpeters\@plusthree.com>",
+  "BUILD_REQUIRES" => {
+    "File::Temp" => 0,
+    "Test::More" => 0
   },
-  'DISTNAME' => 'HTML-Template',
-  'EXE_FILES' => [],
-  'LICENSE' => 'perl',
-  'NAME' => 'HTML::Template',
-  'PREREQ_PM' => {
-    'Carp' => '0',
-    'Digest::MD5' => '0',
-    'File::Spec' => '0.82',
-    'File::Temp' => '0',
-    'Scalar::Util' => '0',
-    'Test::More' => '0'
+  "CONFIGURE_REQUIRES" => {
+    "ExtUtils::MakeMaker" => "6.30"
   },
-  'VERSION' => '2.10',
-  'test' => {
-    'TESTS' => 't/*.t'
+  "DISTNAME" => "HTML-Template",
+  "EXE_FILES" => [],
+  "LICENSE" => "perl",
+  "NAME" => "HTML::Template",
+  "PREREQ_PM" => {
+    "Carp" => 0,
+    "Digest::MD5" => 0,
+    "File::Spec" => "0.82",
+    "Scalar::Util" => 0
+  },
+  "VERSION" => "2.91",
+  "test" => {
+    "TESTS" => "t/*.t"
   }
 );
 
