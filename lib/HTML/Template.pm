@@ -1,6 +1,6 @@
 package HTML::Template;
 
-$HTML::Template::VERSION = '2.92';
+$HTML::Template::VERSION = '2.93';
 
 =head1 NAME
 
@@ -1058,7 +1058,7 @@ sub WHICH_UNLESS ()       { 1 }
 # back to the main package scope.
 package HTML::Template;
 
-my (%OPTIONS, %DEFAULT_OPTIONS, %LOOP_OPTIONS, %DEFAULT_LOOP_OPTIONS);
+my (%OPTIONS, %LOOP_OPTIONS);
 
 # set the default options
 BEGIN {
@@ -1108,10 +1108,6 @@ BEGIN {
         associate         => [],
         loop_context_vars => 0,
     );
-
-    # defaults in case we need to reset
-    %DEFAULT_OPTIONS = %OPTIONS;
-    %LOOP_OPTIONS    = %LOOP_OPTIONS;
 }
 
 # open a new template and return an object handle
@@ -2646,12 +2642,20 @@ sub config {
 
     foreach my $opt (keys %options) {
         if( exists $LOOP_OPTIONS{$opt} ) {
-            $LOOP_OPTIONS{$opt} = $options{$opt};
+            if( $opt eq 'associate' || $opt eq 'filter' || $opt eq 'path' ) {
+                push(@{$LOOP_OPTIONS{$opt}}, $options{$opt});
+            } else {
+                $LOOP_OPTIONS{$opt} = $options{$opt};
+            }
         }
-        $DEFAULT_OPTIONS{$opt} = $options{$opt};
+        if( $opt eq 'associate' || $opt eq 'filter' || $opt eq 'path' ) {
+            push(@{$OPTIONS{$opt}}, $options{$opt});
+        } else {
+            $OPTIONS{$opt} = $options{$opt};
+        }
     }
 
-    return %DEFAULT_OPTIONS;
+    return %OPTIONS;
 }
 
 =head2 param

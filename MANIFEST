@@ -42,6 +42,7 @@ t/13-loop-context.t
 t/13-loop-repeated.t
 t/14-includes.t
 t/15-comment.t
+t/16-config.t
 t/99-old-test-pl.t
 t/release-pod-syntax.t
 t/testlib/IO/Capture.pm
