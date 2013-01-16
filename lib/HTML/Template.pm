@@ -1,6 +1,6 @@
 package HTML::Template;
 
-$HTML::Template::VERSION = '2.91';
+$HTML::Template::VERSION = '2.92';
 
 =head1 NAME
 
@@ -1058,18 +1058,11 @@ sub WHICH_UNLESS ()       { 1 }
 # back to the main package scope.
 package HTML::Template;
 
-# open a new template and return an object handle
-sub new {
-    my $pkg = shift;
-    my $self;
-    { my %hash; $self = bless(\%hash, $pkg); }
+my (%OPTIONS, %DEFAULT_OPTIONS, %LOOP_OPTIONS, %DEFAULT_LOOP_OPTIONS);
 
-    # the options hash
-    my $options = {};
-    $self->{options} = $options;
-
-    # set default parameters in options hash
-    %$options = (
+# set the default options
+BEGIN {
+    %OPTIONS = (
         debug                       => 0,
         stack_debug                 => 0,
         timing                      => 0,
@@ -1107,6 +1100,32 @@ sub new {
         cache_lazy_loops            => 0,
         die_on_missing_include      => 1,
     );
+
+    %LOOP_OPTIONS = (
+        debug             => 0,
+        stack_debug       => 0,
+        die_on_bad_params => 1,
+        associate         => [],
+        loop_context_vars => 0,
+    );
+
+    # defaults in case we need to reset
+    %DEFAULT_OPTIONS = %OPTIONS;
+    %LOOP_OPTIONS    = %LOOP_OPTIONS;
+}
+
+# open a new template and return an object handle
+sub new {
+    my $pkg = shift;
+    my $self;
+    { my %hash; $self = bless(\%hash, $pkg); }
+
+    # the options hash
+    my $options = {};
+    $self->{options} = $options;
+
+    # set default parameters in options hash
+    %$options = %OPTIONS;
 
     # load in options supplied to new()
     $options = _load_supplied_options([@_], $options);
@@ -1308,21 +1327,8 @@ sub _new_from_loop {
     { my %hash; $self = bless(\%hash, $pkg); }
 
     # the options hash
-    my $options = {};
+    my $options = {%LOOP_OPTIONS};
     $self->{options} = $options;
-
-    # set default parameters in options hash - a subset of the options
-    # valid in a normal new().  Since _new_from_loop never calls _init,
-    # many options have no relevance.
-    %$options = (
-        debug             => 0,
-        stack_debug       => 0,
-        die_on_bad_params => 1,
-        associate         => [],
-        loop_context_vars => 0,
-    );
-
-    # load in options supplied to new()
     $options = _load_supplied_options([@_], $options);
 
     $self->{param_map}   = $options->{param_map};
@@ -2167,17 +2173,16 @@ sub _parse {
 
             # take actions depending on which tag found
             if ($which eq 'TMPL_VAR') {
-                $options->{debug}
-                  and print STDERR "### HTML::Template Debug ### $fname : line $fcounter : parsed VAR $name\n";
+                print STDERR "### HTML::Template Debug ### $fname : line $fcounter : parsed VAR $name\n" if $options->{debug};
 
                 # if we already have this var, then simply link to the existing
                 # HTML::Template::VAR, else create a new one.
                 my $var;
                 if (exists $pmap{$name}) {
                     $var = $pmap{$name};
-                    (ref($var) eq 'HTML::Template::VAR')
-                      or die
-                      "HTML::Template->new() : Already used param name $name as a TMPL_LOOP, found in a TMPL_VAR at $fname : line $fcounter.";
+                    if( $options->{die_on_bad_params} && ref($var) ne 'HTML::Template::VAR') {
+                        die "HTML::Template->new() : Already used param name $name as a TMPL_LOOP, found in a TMPL_VAR at $fname : line $fcounter.";
+                    }
                 } else {
                     $var             = HTML::Template::VAR->new();
                     $pmap{$name}     = $var;
@@ -2212,17 +2217,16 @@ sub _parse {
 
             } elsif ($which eq 'TMPL_LOOP') {
                 # we've got a loop start
-                $options->{debug}
-                  and print STDERR "### HTML::Template Debug ### $fname : line $fcounter : LOOP $name start\n";
+                print STDERR "### HTML::Template Debug ### $fname : line $fcounter : LOOP $name start\n" if $options->{debug};
 
                 # if we already have this loop, then simply link to the existing
                 # HTML::Template::LOOP, else create a new one.
                 my $loop;
                 if (exists $pmap{$name}) {
                     $loop = $pmap{$name};
-                    (ref($loop) eq 'HTML::Template::LOOP')
-                      or die
-                      "HTML::Template->new() : Already used param name $name as a TMPL_VAR, TMPL_IF or TMPL_UNLESS, found in a TMPL_LOOP at $fname : line $fcounter!";
+                    if( $options->{die_on_bad_params} && ref($loop) ne 'HTML::Template::LOOP') {
+                        die "HTML::Template->new() : Already used param name $name as a TMPL_VAR, TMPL_IF or TMPL_UNLESS, found in a TMPL_LOOP at $fname : line $fcounter!";
+                    }
 
                 } else {
                     # store the results in a LOOP object - actually just a
@@ -2615,6 +2619,39 @@ sub _unglobalize_vars {
     map   { $_->_unglobalize_vars() }
       map { values %{$_->[HTML::Template::LOOP::TEMPLATE_HASH]} }
       grep { ref($_) eq 'HTML::Template::LOOP' } @{$self->{parse_stack}};
+}
+
+=head2 config
+
+A package method that is used to set/get the global default configuration options.
+For instance, if you want to set the C<utf8> flag to always be on for every
+template loaded by this process you would do:
+
+    HTML::Template->config(utf8 => 1);
+
+Or if you wanted to check if the C<utf8> flag was on or not, you could do:
+
+    my %config = HTML::Template->config;
+    if( $config{utf8} ) {
+        ...
+    }
+
+Any configuration options that are valid for C<new()> are acceptable to be
+passed to this method.
+
+=cut
+
+sub config {
+    my ($pkg, %options) = @_;
+
+    foreach my $opt (keys %options) {
+        if( exists $LOOP_OPTIONS{$opt} ) {
+            $LOOP_OPTIONS{$opt} = $options{$opt};
+        }
+        $DEFAULT_OPTIONS{$opt} = $options{$opt};
+    }
+
+    return %DEFAULT_OPTIONS;
 }
 
 =head2 param
