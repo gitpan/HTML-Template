@@ -22,4 +22,4 @@ requires:
 resources:
   bugtracker: https://rt.cpan.org/Public/Dist/Display.html?Name=HTML-Template
   repository: git://github.com/mpeters/html-template.git
-version: 2.93
+version: 2.94
