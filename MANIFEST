@@ -21,6 +21,7 @@ t/02-parse.t
 t/02-random.t
 t/03-associate.t
 t/03-else_else_bug.t
+t/04-default-escape.t
 t/04-default_with_escape.t
 t/04-escape.t
 t/04-no_taintmode.t

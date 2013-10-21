@@ -1,6 +1,6 @@
 package HTML::Template;
 
-$HTML::Template::VERSION = '2.94';
+$HTML::Template::VERSION = '2.95';
 
 =head1 NAME
 
@@ -1259,9 +1259,9 @@ sub new {
 
     if ($options->{default_escape}) {
         $options->{default_escape} = uc $options->{default_escape};
-        unless ($options->{default_escape} =~ /^(HTML|URL|JS)$/) {
+        unless ($options->{default_escape} =~ /^(NONE|HTML|URL|JS)$/i) {
             croak(
-                "HTML::Template->new(): Invalid setting for default_escape - '$options->{default_escape}'.  Valid values are HTML, URL or JS."
+                "HTML::Template->new(): Invalid setting for default_escape - '$options->{default_escape}'.  Valid values are 'none', 'html', 'url', or 'js'."
             );
         }
     }
@@ -3086,7 +3086,8 @@ sub output {
                 $tmp_val =~ s/\\/\\\\/g;
                 $tmp_val =~ s/'/\\'/g;
                 $tmp_val =~ s/"/\\"/g;
-                $tmp_val =~ s/\n/\\n/g;
+                $tmp_val =~ s/[\n\x{2028}]/\\n/g;
+                $tmp_val =~ s/\x{2029}/\\n\\n/g;
                 $tmp_val =~ s/\r/\\r/g;
                 $result .= $tmp_val;
             }
